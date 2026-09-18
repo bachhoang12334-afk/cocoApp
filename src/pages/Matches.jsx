@@ -1,36 +1,25 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AppLayout, { Icon } from '../components/AppLayout'
-import { accountStorage, getCurrentAccount } from '../auth'
+import { getCurrentAccount } from '../auth'
 import { supabase } from '../lib/supabaseClient'
 
-const MESSAGES_KEY_PREFIX = 'cocoapp.connection-messages.'
 const purposeLabels = {
   study_group: 'Học nhóm',
   team_project: 'Team Project',
   roommates: 'Ghép trọ',
 }
 
-function readMessages(id) {
-  try {
-    const raw = accountStorage.getItem(`${MESSAGES_KEY_PREFIX}${id}`)
-    const messages = raw ? JSON.parse(raw) : []
-
-    if (!Array.isArray(messages)) throw new Error('Invalid messages')
-    return messages
-  } catch {
-    return []
+function mapMessage(message, userId) {
+  return {
+    id: message.id,
+    sender: message.sender_id === userId ? 'me' : 'other',
+    text: message.body,
+    createdAt: message.created_at,
   }
 }
 
-function writeMessages(id, messages) {
-  accountStorage.setItem(
-    `${MESSAGES_KEY_PREFIX}${id}`,
-    JSON.stringify(messages)
-  )
-}
-
-function mapRequest(request, userId) {
+function mapRequest(request, userId, messagesByRequest) {
   const isIncoming = request.recipient_id === userId
   const otherProfile = isIncoming ? request.requester : request.recipient
 
@@ -47,7 +36,7 @@ function mapRequest(request, userId) {
     isIncoming,
     requesterId: request.requester_id,
     recipientId: request.recipient_id,
-    messages: readMessages(request.id),
+    messages: messagesByRequest.get(request.id) || [],
   }
 }
 
@@ -62,11 +51,46 @@ function getMatchesErrorMessage(error) {
   return 'Không thể tải danh sách kết nối. Hãy thử lại sau.'
 }
 
+function getMessageErrorMessage(error) {
+  if (error?.message?.toLowerCase().includes('row-level security')) {
+    return 'Không thể gửi tin nhắn. Hãy kiểm tra kết nối vẫn đang được chấp nhận.'
+  }
+
+  return 'Chưa gửi được tin nhắn. Hãy thử lại.'
+}
+
+function mergeMessages(serverMessages, currentMessages) {
+  const byId = new Map()
+
+  for (const message of [...serverMessages, ...currentMessages]) {
+    byId.set(message.id, message)
+  }
+
+  return [...byId.values()].sort((first, second) => {
+    const timeDifference = new Date(first.createdAt) - new Date(second.createdAt)
+    return timeDifference || first.id.localeCompare(second.id)
+  })
+}
+
+function mergeConnections(serverConnections, currentConnections) {
+  const currentById = new Map(currentConnections.map((item) => [item.id, item]))
+
+  return serverConnections.map((item) => {
+    const current = currentById.get(item.id)
+    if (!current) return item
+
+    return {
+      ...item,
+      messages: mergeMessages(item.messages, current.messages),
+    }
+  })
+}
+
 async function fetchConnections() {
   const user = await getCurrentAccount()
   if (!user) throw new Error('Phiên đăng nhập đã hết.')
 
-  const { data, error } = await supabase
+  const { data: requests, error } = await supabase
     .from('connection_requests')
     .select(requestSelect)
     .or(`requester_id.eq.${user.id},recipient_id.eq.${user.id}`)
@@ -74,7 +98,34 @@ async function fetchConnections() {
 
   if (error) throw error
 
-  return (data || []).map((request) => mapRequest(request, user.id))
+  const acceptedRequestIds = (requests || [])
+    .filter((request) => request.status === 'accepted')
+    .map((request) => request.id)
+  const messagesByRequest = new Map()
+
+  if (acceptedRequestIds.length > 0) {
+    const { data: messages, error: messagesError } = await supabase
+      .from('messages')
+      .select('id, connection_request_id, sender_id, body, created_at')
+      .in('connection_request_id', acceptedRequestIds)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+
+    if (messagesError) throw messagesError
+
+    for (const message of messages || []) {
+      const requestMessages = messagesByRequest.get(message.connection_request_id) || []
+      requestMessages.push(mapMessage(message, user.id))
+      messagesByRequest.set(message.connection_request_id, requestMessages)
+    }
+  }
+
+  return {
+    userId: user.id,
+    connections: (requests || []).map((request) => (
+      mapRequest(request, user.id, messagesByRequest)
+    )),
+  }
 }
 
 export default function Matches() {
@@ -85,6 +136,7 @@ export default function Matches() {
   const [tab, setTab] = useState('pending')
   const [chatId, setChatId] = useState(null)
   const [draft, setDraft] = useState('')
+  const [isSendingMessage, setIsSendingMessage] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
   const [confirmation, setConfirmation] = useState(null)
   const chatHeadingRef = useRef(null)
@@ -92,23 +144,85 @@ export default function Matches() {
   const lastChatTriggerRef = useRef(null)
   const shouldFocusChatRef = useRef(false)
   const confirmationTriggerRef = useRef(null)
+  const messageUserIdRef = useRef(null)
 
   useEffect(() => {
     let isMounted = true
+    let messageChannel = null
+    let refreshInFlight = null
 
-    fetchConnections()
-      .then((nextConnections) => {
-        if (isMounted) setConnections(nextConnections)
-      })
-      .catch((loadError) => {
+    function refreshConnections() {
+      if (refreshInFlight) return refreshInFlight
+
+      refreshInFlight = fetchConnections()
+        .then(({ userId, connections: nextConnections }) => {
+          if (!isMounted) return
+
+          messageUserIdRef.current = userId
+          setConnections((current) => mergeConnections(nextConnections, current))
+          setError('')
+        })
+        .finally(() => {
+          refreshInFlight = null
+        })
+
+      return refreshInFlight
+    }
+
+    async function setupMessages() {
+      try {
+        await refreshConnections()
+        if (!isMounted || !messageUserIdRef.current) return
+
+        messageChannel = supabase
+          .channel(`messages:${messageUserIdRef.current}`)
+          .on(
+            'postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'messages' },
+            (payload) => {
+              if (!isMounted || !payload.new?.connection_request_id) return
+
+              const message = mapMessage(payload.new, messageUserIdRef.current)
+              setConnections((current) => current.map((item) => {
+                if (item.id !== payload.new.connection_request_id) return item
+                if (item.messages.some((currentMessage) => currentMessage.id === message.id)) {
+                  return item
+                }
+
+                return {
+                  ...item,
+                  messages: mergeMessages(item.messages, [message]),
+                }
+              }))
+            }
+          )
+          .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+              void refreshConnections().catch((loadError) => {
+                if (isMounted) setError(getMatchesErrorMessage(loadError))
+              })
+            }
+          })
+      } catch (loadError) {
+        if (isMounted) setError(getMatchesErrorMessage(loadError))
+      } finally {
+        if (isMounted) setIsLoading(false)
+      }
+    }
+
+    function handleWindowFocus() {
+      void refreshConnections().catch((loadError) => {
         if (isMounted) setError(getMatchesErrorMessage(loadError))
       })
-      .finally(() => {
-        if (isMounted) setIsLoading(false)
-      })
+    }
+
+    window.addEventListener('focus', handleWindowFocus)
+    void setupMessages()
 
     return () => {
       isMounted = false
+      window.removeEventListener('focus', handleWindowFocus)
+      if (messageChannel) void supabase.removeChannel(messageChannel)
     }
   }, [])
 
@@ -155,15 +269,21 @@ export default function Matches() {
     setError('')
 
     try {
-      const { error: updateError } = await supabase
+      const { data: updatedRequest, error: updateError } = await supabase
         .from('connection_requests')
         .update({ status })
         .eq('id', id)
+        .select('id, status')
+        .single()
 
       if (updateError) throw updateError
+      if (updatedRequest.status !== status) {
+        throw new Error('Connection request status was not updated')
+      }
 
-      const nextConnections = await fetchConnections()
-      setConnections(nextConnections)
+      const { userId, connections: nextConnections } = await fetchConnections()
+      messageUserIdRef.current = userId
+      setConnections((current) => mergeConnections(nextConnections, current))
       setStatusMessage(
         status === 'accepted'
           ? 'Đã chấp nhận lời mời kết nối.'
@@ -236,27 +356,42 @@ export default function Matches() {
     lastChatTriggerRef.current?.focus({ preventScroll: true })
   }
 
-  function sendMessage(event) {
+  async function sendMessage(event) {
     event.preventDefault()
 
     const text = draft.trim()
-    if (!text || !chat) return
+    const userId = messageUserIdRef.current
+    if (!text || !chat || !userId || isSendingMessage) return
 
-    const message = {
-      id: crypto.randomUUID(),
-      sender: 'me',
-      text,
-    }
+    const connectionRequestId = chat.id
+    setIsSendingMessage(true)
+    setError('')
 
     try {
-      const messages = [...chat.messages, message]
-      writeMessages(chat.id, messages)
+      const { data: insertedMessage, error: insertError } = await supabase
+        .from('messages')
+        .insert({
+          id: crypto.randomUUID(),
+          connection_request_id: connectionRequestId,
+          sender_id: userId,
+          body: text,
+        })
+        .select('id, connection_request_id, sender_id, body, created_at')
+        .single()
+
+      if (insertError) throw insertError
+
+      const message = mapMessage(insertedMessage, userId)
       setConnections((current) => current.map((item) =>
-        item.id === chat.id ? { ...item, messages } : item
+        item.id === connectionRequestId
+          ? { ...item, messages: mergeMessages(item.messages, [message]) }
+          : item
       ))
       setDraft('')
-    } catch {
-      setError('Chưa lưu được tin nhắn. Hãy thử lại.')
+    } catch (sendError) {
+      setError(getMessageErrorMessage(sendError))
+    } finally {
+      setIsSendingMessage(false)
     }
   }
 
@@ -276,14 +411,13 @@ export default function Matches() {
         </header>
 
         <p className="discover-demo-note">
-          Lời mời được lưu trên Supabase. Tin nhắn vẫn được lưu
-          riêng trên trình duyệt trong giai đoạn này.
+          Lời mời và tin nhắn được đồng bộ an toàn qua Supabase.
         </p>
 
         <div className="matches-summary">
           <div className="matches-summary-copy">
             <span className="summary-live-dot" />
-            <div><strong>Không gian kết nối của cậu</strong><small>Dữ liệu hiện được lưu riêng theo tài khoản trên trình duyệt này.</small></div>
+            <div><strong>Không gian kết nối của cậu</strong><small>Tin nhắn mới được cập nhật theo thời gian thực.</small></div>
           </div>
           <div className="matches-summary-stats">
             <span><strong>{pendingCount}</strong> đang chờ</span>
@@ -503,9 +637,10 @@ export default function Matches() {
                     <button
                       type="submit"
                       className="connect-student-button"
-                      disabled={!draft.trim()}
+                      disabled={!draft.trim() || isSendingMessage}
+                      aria-busy={isSendingMessage}
                     >
-                      Gửi tin nhắn
+                      {isSendingMessage ? 'Đang gửi…' : 'Gửi tin nhắn'}
                     </button>
 
                   </div>
