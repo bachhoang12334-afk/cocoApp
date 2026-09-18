@@ -1,7 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AppLayout, { Icon } from '../components/AppLayout'
 import { getCurrentAccount } from '../auth'
+import { useConnectionRequestRefresh } from '../hooks/useConnectionRequestRefresh'
+import {
+  applyReadReceipts,
+  getUnreadMessageCount,
+  mapMessage,
+  mergeMessages,
+  MESSAGE_PAGE_SIZE,
+  normalizeMessagePage,
+} from '../lib/messageState'
 import { supabase } from '../lib/supabaseClient'
 
 const purposeLabels = {
@@ -10,25 +19,10 @@ const purposeLabels = {
   roommates: 'Ghép trọ',
 }
 
-function mapMessage(message, userId) {
-  return {
-    id: message.id,
-    sender: message.sender_id === userId ? 'me' : 'other',
-    text: message.body,
-    createdAt: message.created_at,
-    readAt: message.read_at,
-  }
-}
-
-function getUnreadMessageCount(connection) {
-  return connection.messages.filter(
-    (message) => message.sender === 'other' && message.readAt === null
-  ).length
-}
-
-function mapRequest(request, userId, messagesByRequest) {
+function mapRequest(request, userId, messagePagesByRequest) {
   const isIncoming = request.recipient_id === userId
   const otherProfile = isIncoming ? request.requester : request.recipient
+  const messagePage = messagePagesByRequest.get(request.id)
 
   return {
     id: request.id,
@@ -43,7 +37,9 @@ function mapRequest(request, userId, messagesByRequest) {
     isIncoming,
     requesterId: request.requester_id,
     recipientId: request.recipient_id,
-    messages: messagesByRequest.get(request.id) || [],
+    messages: messagePage?.messages || [],
+    hasOlderMessages: messagePage?.hasOlder || false,
+    unreadCount: messagePage?.unreadCount || 0,
   }
 }
 
@@ -66,41 +62,6 @@ function getMessageErrorMessage(error) {
   return 'Chưa gửi được tin nhắn. Hãy thử lại.'
 }
 
-function mergeMessages(serverMessages, currentMessages) {
-  const byId = new Map()
-
-  for (const message of [...serverMessages, ...currentMessages]) {
-    const existing = byId.get(message.id)
-    byId.set(message.id, {
-      ...existing,
-      ...message,
-      readAt: existing?.readAt || message.readAt,
-    })
-  }
-
-  return [...byId.values()].sort((first, second) => {
-    const timeDifference = new Date(first.createdAt) - new Date(second.createdAt)
-    return timeDifference || first.id.localeCompare(second.id)
-  })
-}
-
-function applyReadReceipts(connections, receipts) {
-  if (receipts.length === 0) return connections
-
-  const readAtById = new Map(
-    receipts.map((receipt) => [receipt.id, receipt.read_at])
-  )
-
-  return connections.map((connection) => ({
-    ...connection,
-    messages: connection.messages.map((message) => (
-      readAtById.has(message.id)
-        ? { ...message, readAt: readAtById.get(message.id) }
-        : message
-    )),
-  }))
-}
-
 async function markReceivedMessagesRead(connectionRequestId, userId) {
   const { data, error } = await supabase
     .from('messages')
@@ -108,7 +69,7 @@ async function markReceivedMessagesRead(connectionRequestId, userId) {
     .eq('connection_request_id', connectionRequestId)
     .neq('sender_id', userId)
     .is('read_at', null)
-    .select('id, read_at')
+    .select('id, connection_request_id, read_at')
 
   if (error) throw error
   return data || []
@@ -124,8 +85,54 @@ function mergeConnections(serverConnections, currentConnections) {
     return {
       ...item,
       messages: mergeMessages(item.messages, current.messages),
+      hasOlderMessages: current.hasOlderMessages,
     }
   })
+}
+
+async function fetchMessagePage(connectionRequestId, userId, beforeMessage = null) {
+  let query = supabase
+    .from('messages')
+    .select('id, connection_request_id, sender_id, body, created_at, read_at')
+    .eq('connection_request_id', connectionRequestId)
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(MESSAGE_PAGE_SIZE + 1)
+
+  if (beforeMessage) {
+    query = query.or(
+      `created_at.lt.${beforeMessage.createdAt},and(created_at.eq.${beforeMessage.createdAt},id.lt.${beforeMessage.id})`
+    )
+  }
+
+  const { data, error } = await query
+  if (error) throw error
+
+  return normalizeMessagePage(data || [], userId)
+}
+
+async function fetchUnreadMessageCount(connectionRequestId, userId) {
+  const { count, error } = await supabase
+    .from('messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('connection_request_id', connectionRequestId)
+    .neq('sender_id', userId)
+    .is('read_at', null)
+
+  if (error) throw error
+  return count || 0
+}
+
+async function fetchConversationState(connectionRequestId, userId) {
+  const [messagePage, unreadCount] = await Promise.all([
+    fetchMessagePage(connectionRequestId, userId),
+    fetchUnreadMessageCount(connectionRequestId, userId),
+  ])
+
+  return {
+    ...messagePage,
+    unreadCount,
+  }
 }
 
 async function fetchConnections() {
@@ -143,29 +150,25 @@ async function fetchConnections() {
   const acceptedRequestIds = (requests || [])
     .filter((request) => request.status === 'accepted')
     .map((request) => request.id)
-  const messagesByRequest = new Map()
+  const messagePagesByRequest = new Map()
 
   if (acceptedRequestIds.length > 0) {
-    const { data: messages, error: messagesError } = await supabase
-      .from('messages')
-      .select('id, connection_request_id, sender_id, body, created_at, read_at')
-      .in('connection_request_id', acceptedRequestIds)
-      .order('created_at', { ascending: true })
-      .order('id', { ascending: true })
+    const messagePages = await Promise.all(
+      acceptedRequestIds.map(async (requestId) => [
+        requestId,
+        await fetchConversationState(requestId, user.id),
+      ])
+    )
 
-    if (messagesError) throw messagesError
-
-    for (const message of messages || []) {
-      const requestMessages = messagesByRequest.get(message.connection_request_id) || []
-      requestMessages.push(mapMessage(message, user.id))
-      messagesByRequest.set(message.connection_request_id, requestMessages)
+    for (const [requestId, messagePage] of messagePages) {
+      messagePagesByRequest.set(requestId, messagePage)
     }
   }
 
   return {
     userId: user.id,
     connections: (requests || []).map((request) => (
-      mapRequest(request, user.id, messagesByRequest)
+      mapRequest(request, user.id, messagePagesByRequest)
     )),
   }
 }
@@ -179,6 +182,7 @@ export default function Matches() {
   const [chatId, setChatId] = useState(null)
   const [draft, setDraft] = useState('')
   const [isSendingMessage, setIsSendingMessage] = useState(false)
+  const [loadingOlderId, setLoadingOlderId] = useState(null)
   const [statusMessage, setStatusMessage] = useState('')
   const [confirmation, setConfirmation] = useState(null)
   const chatHeadingRef = useRef(null)
@@ -188,60 +192,96 @@ export default function Matches() {
   const confirmationTriggerRef = useRef(null)
   const messageUserIdRef = useRef(null)
   const activeChatIdRef = useRef(null)
+  const matchesMountedRef = useRef(false)
+  const refreshConnectionsPromiseRef = useRef(null)
 
   useEffect(() => {
-    let isMounted = true
-    let messageChannel = null
-    let refreshInFlight = null
-
-    function refreshConnections() {
-      if (refreshInFlight) return refreshInFlight
-
-      refreshInFlight = fetchConnections()
-        .then(({ userId, connections: nextConnections }) => {
-          if (!isMounted) return
-
-          messageUserIdRef.current = userId
-          setConnections((current) => mergeConnections(nextConnections, current))
-          setError('')
-
-          if (
-            activeChatIdRef.current
-            && document.visibilityState === 'visible'
-            && document.hasFocus()
-          ) {
-            void markReceivedMessagesRead(activeChatIdRef.current, userId)
-              .then((receipts) => {
-                if (isMounted) {
-                  setConnections((current) => applyReadReceipts(current, receipts))
-                }
-              })
-              .catch(() => {
-                if (isMounted) {
-                  setError('Chưa đánh dấu được tin nhắn là đã đọc.')
-                }
-              })
-          }
-        })
-        .finally(() => {
-          refreshInFlight = null
-        })
-
-      return refreshInFlight
+    matchesMountedRef.current = true
+    return () => {
+      matchesMountedRef.current = false
     }
+  }, [])
+
+  const refreshConnections = useCallback(() => {
+    if (refreshConnectionsPromiseRef.current) {
+      return refreshConnectionsPromiseRef.current
+    }
+
+    const refreshPromise = fetchConnections()
+      .then(({ userId, connections: nextConnections }) => {
+        if (!matchesMountedRef.current) return
+
+        messageUserIdRef.current = userId
+        setConnections((current) => mergeConnections(nextConnections, current))
+        setError('')
+
+        if (
+          activeChatIdRef.current
+          && document.visibilityState === 'visible'
+          && document.hasFocus()
+        ) {
+          const connectionRequestId = activeChatIdRef.current
+
+          void markReceivedMessagesRead(connectionRequestId, userId)
+            .then((receipts) => {
+              if (matchesMountedRef.current) {
+                setConnections((current) => applyReadReceipts(current, receipts))
+              }
+
+              return fetchUnreadMessageCount(connectionRequestId, userId)
+            })
+            .then((unreadCount) => {
+              if (matchesMountedRef.current) {
+                setConnections((current) => current.map((item) => (
+                  item.id === connectionRequestId
+                    ? { ...item, unreadCount }
+                    : item
+                )))
+              }
+            })
+            .catch(() => {
+              if (matchesMountedRef.current) {
+                setError('Chưa đánh dấu được tin nhắn là đã đọc.')
+              }
+            })
+        }
+      })
+      .finally(() => {
+        if (refreshConnectionsPromiseRef.current === refreshPromise) {
+          refreshConnectionsPromiseRef.current = null
+        }
+        if (matchesMountedRef.current) setIsLoading(false)
+      })
+
+    refreshConnectionsPromiseRef.current = refreshPromise
+    return refreshPromise
+  }, [])
+
+  useConnectionRequestRefresh(refreshConnections, {
+    onError: (loadError) => {
+      if (matchesMountedRef.current) {
+        setError(getMatchesErrorMessage(loadError))
+      }
+    },
+  })
+
+  useEffect(() => {
+    let messageChannel = null
 
     async function setupMessages() {
       try {
-        await refreshConnections()
-        if (!isMounted || !messageUserIdRef.current) return
+        const user = await getCurrentAccount()
+        if (!user || !matchesMountedRef.current) return
+
+        messageUserIdRef.current = user.id
 
         messageChannel = supabase
-          .channel(`messages:${messageUserIdRef.current}`)
+          .channel(`messages:${user.id}`)
           .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'messages' },
             (payload) => {
-              if (!isMounted || !payload.new?.connection_request_id) return
+              if (!matchesMountedRef.current || !payload.new?.connection_request_id) return
 
               if (payload.eventType === 'INSERT') {
                 const message = mapMessage(payload.new, messageUserIdRef.current)
@@ -254,8 +294,18 @@ export default function Matches() {
                   return {
                     ...item,
                     messages: mergeMessages(item.messages, [message]),
+                    unreadCount: getUnreadMessageCount(item) + (
+                      message.sender === 'other' ? 1 : 0
+                    ),
                   }
                 }))
+
+                if (activeChatIdRef.current === payload.new.connection_request_id) {
+                  window.requestAnimationFrame(() => {
+                    const messageList = messageListRef.current
+                    if (messageList) messageList.scrollTop = messageList.scrollHeight
+                  })
+                }
 
                 if (
                   message.sender === 'other'
@@ -268,12 +318,26 @@ export default function Matches() {
                     messageUserIdRef.current
                   )
                     .then((receipts) => {
-                      if (isMounted) {
+                      if (matchesMountedRef.current) {
                         setConnections((current) => applyReadReceipts(current, receipts))
+                      }
+
+                      return fetchUnreadMessageCount(
+                        payload.new.connection_request_id,
+                        messageUserIdRef.current
+                      )
+                    })
+                    .then((unreadCount) => {
+                      if (matchesMountedRef.current) {
+                        setConnections((current) => current.map((item) => (
+                          item.id === payload.new.connection_request_id
+                            ? { ...item, unreadCount }
+                            : item
+                        )))
                       }
                     })
                     .catch(() => {
-                      if (isMounted) {
+                      if (matchesMountedRef.current) {
                         setError('Chưa đánh dấu được tin nhắn là đã đọc.')
                       }
                     })
@@ -283,6 +347,11 @@ export default function Matches() {
                   item.id === payload.new.connection_request_id
                     ? {
                         ...item,
+                        unreadCount: item.messages.some((message) => (
+                          message.id === payload.new.id && message.readAt === null
+                        ))
+                          ? Math.max(0, getUnreadMessageCount(item) - 1)
+                          : getUnreadMessageCount(item),
                         messages: item.messages.map((message) => (
                           message.id === payload.new.id
                             ? { ...message, readAt: payload.new.read_at }
@@ -291,46 +360,33 @@ export default function Matches() {
                       }
                     : item
                 )))
+
+                void refreshConnections().catch((loadError) => {
+                  if (matchesMountedRef.current) {
+                    setError(getMatchesErrorMessage(loadError))
+                  }
+                })
               }
             }
           )
           .subscribe((status) => {
             if (status === 'SUBSCRIBED') {
               void refreshConnections().catch((loadError) => {
-                if (isMounted) setError(getMatchesErrorMessage(loadError))
+                if (matchesMountedRef.current) setError(getMatchesErrorMessage(loadError))
               })
             }
           })
       } catch (loadError) {
-        if (isMounted) setError(getMatchesErrorMessage(loadError))
-      } finally {
-        if (isMounted) setIsLoading(false)
+        if (matchesMountedRef.current) setError(getMatchesErrorMessage(loadError))
       }
     }
 
-    function handleWindowFocus() {
-      void refreshConnections().catch((loadError) => {
-        if (isMounted) setError(getMatchesErrorMessage(loadError))
-      })
-    }
-
-    function handleVisibilityChange() {
-      if (document.visibilityState === 'visible') {
-        handleWindowFocus()
-      }
-    }
-
-    window.addEventListener('focus', handleWindowFocus)
-    document.addEventListener('visibilitychange', handleVisibilityChange)
     void setupMessages()
 
     return () => {
-      isMounted = false
-      window.removeEventListener('focus', handleWindowFocus)
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
       if (messageChannel) void supabase.removeChannel(messageChannel)
     }
-  }, [])
+  }, [refreshConnections])
 
   const pendingCount = connections.filter(
     (item) => item.status === 'pending'
@@ -347,7 +403,6 @@ export default function Matches() {
   const chat = connections.find(
     (item) => item.id === chatId && item.status === 'accepted'
   )
-  const chatMessageCount = chat?.messages.length ?? 0
 
   const acceptedConnections = connections.filter(
     (item) => item.status === 'accepted'
@@ -373,7 +428,7 @@ export default function Matches() {
       const messageList = messageListRef.current
       if (messageList) messageList.scrollTop = messageList.scrollHeight
     }
-  }, [chatId, chatMessageCount])
+  }, [chatId])
 
   async function updateRequest(id, status) {
     const request = connections.find((item) => item.id === id)
@@ -460,9 +515,61 @@ export default function Matches() {
 
     try {
       const receipts = await markReceivedMessagesRead(id, userId)
+      if (!matchesMountedRef.current) return
+
       setConnections((current) => applyReadReceipts(current, receipts))
+      const unreadCount = await fetchUnreadMessageCount(id, userId)
+      if (matchesMountedRef.current) {
+        setConnections((current) => current.map((item) => (
+          item.id === id ? { ...item, unreadCount } : item
+        )))
+      }
     } catch {
       setError('Chưa đánh dấu được tin nhắn là đã đọc.')
+    }
+  }
+
+  async function loadOlderMessages(id) {
+    const userId = messageUserIdRef.current
+    const connection = connections.find((item) => item.id === id)
+    const oldestMessage = connection?.messages[0]
+
+    if (!userId || !connection?.hasOlderMessages || !oldestMessage || loadingOlderId) {
+      return
+    }
+
+    const messageList = messageListRef.current
+    const previousScrollHeight = messageList?.scrollHeight || 0
+    const previousScrollTop = messageList?.scrollTop || 0
+
+    setLoadingOlderId(id)
+    setError('')
+
+    try {
+      const page = await fetchMessagePage(id, userId, oldestMessage)
+
+      setConnections((current) => current.map((item) => (
+        item.id === id
+          ? {
+              ...item,
+              messages: mergeMessages(page.messages, item.messages),
+              hasOlderMessages: page.hasOlder,
+            }
+          : item
+      )))
+
+      window.requestAnimationFrame(() => {
+        const currentList = messageListRef.current
+        if (!currentList || activeChatIdRef.current !== id) return
+
+        currentList.scrollTop = previousScrollTop
+          + currentList.scrollHeight
+          - previousScrollHeight
+      })
+    } catch {
+      setError('Chưa tải được tin nhắn cũ hơn. Hãy thử lại.')
+    } finally {
+      setLoadingOlderId(null)
     }
   }
 
@@ -517,6 +624,10 @@ export default function Matches() {
           : item
       ))
       setDraft('')
+      window.requestAnimationFrame(() => {
+        const messageList = messageListRef.current
+        if (messageList) messageList.scrollTop = messageList.scrollHeight
+      })
     } catch (sendError) {
       setError(getMessageErrorMessage(sendError))
     } finally {
@@ -741,6 +852,21 @@ export default function Matches() {
                   aria-label={`Tin nhắn với ${chat.name}`}
                   aria-live="polite"
                 >
+                  {chat.hasOlderMessages && (
+                    <div className="chat-history-loader">
+                      <button
+                        type="button"
+                        onClick={() => loadOlderMessages(chat.id)}
+                        disabled={loadingOlderId === chat.id}
+                        aria-busy={loadingOlderId === chat.id}
+                      >
+                        {loadingOlderId === chat.id
+                          ? 'Đang tải tin nhắn cũ…'
+                          : 'Tải tin nhắn cũ hơn'}
+                      </button>
+                    </div>
+                  )}
+
                   {chat.messages.length === 0 && (
                     <p className="chat-empty-message">Chưa có tin nhắn. Hãy gửi lời chào đầu tiên.</p>
                   )}

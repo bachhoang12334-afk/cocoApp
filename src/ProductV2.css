@@ -2706,6 +2706,16 @@ textarea:focus-visible {
   font-size: 16px;
 }
 
+.dashboard-loading-banner {
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  color: var(--coco-primary-dark);
+  border: 1px solid #c7e1e4;
+  border-radius: 10px;
+  background: var(--coco-primary-soft);
+  font-size: 14px;
+}
+
 .dashboard-hero-grid {
   grid-template-columns: minmax(0, 1.65fr) minmax(250px, .7fr);
   gap: 20px;
@@ -3355,6 +3365,35 @@ textarea:focus-visible {
   border: 0;
   border-radius: 0;
   background: #f8fafb;
+}
+
+.chat-history-loader {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+
+.chat-history-loader button {
+  min-height: 40px;
+  padding: 0 14px;
+  color: var(--coco-primary-dark);
+  border: 1px solid #bdd9dc;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.chat-history-loader button:hover:not(:disabled),
+.chat-history-loader button:focus-visible {
+  border-color: var(--coco-primary);
+  background: var(--coco-primary-soft);
+}
+
+.chat-history-loader button:disabled {
+  cursor: wait;
+  opacity: .68;
 }
 
 .chat-empty-message {
