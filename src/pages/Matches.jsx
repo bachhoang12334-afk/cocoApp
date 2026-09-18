@@ -16,7 +16,14 @@ function mapMessage(message, userId) {
     sender: message.sender_id === userId ? 'me' : 'other',
     text: message.body,
     createdAt: message.created_at,
+    readAt: message.read_at,
   }
+}
+
+function getUnreadMessageCount(connection) {
+  return connection.messages.filter(
+    (message) => message.sender === 'other' && message.readAt === null
+  ).length
 }
 
 function mapRequest(request, userId, messagesByRequest) {
@@ -63,13 +70,48 @@ function mergeMessages(serverMessages, currentMessages) {
   const byId = new Map()
 
   for (const message of [...serverMessages, ...currentMessages]) {
-    byId.set(message.id, message)
+    const existing = byId.get(message.id)
+    byId.set(message.id, {
+      ...existing,
+      ...message,
+      readAt: existing?.readAt || message.readAt,
+    })
   }
 
   return [...byId.values()].sort((first, second) => {
     const timeDifference = new Date(first.createdAt) - new Date(second.createdAt)
     return timeDifference || first.id.localeCompare(second.id)
   })
+}
+
+function applyReadReceipts(connections, receipts) {
+  if (receipts.length === 0) return connections
+
+  const readAtById = new Map(
+    receipts.map((receipt) => [receipt.id, receipt.read_at])
+  )
+
+  return connections.map((connection) => ({
+    ...connection,
+    messages: connection.messages.map((message) => (
+      readAtById.has(message.id)
+        ? { ...message, readAt: readAtById.get(message.id) }
+        : message
+    )),
+  }))
+}
+
+async function markReceivedMessagesRead(connectionRequestId, userId) {
+  const { data, error } = await supabase
+    .from('messages')
+    .update({ read_at: new Date().toISOString() })
+    .eq('connection_request_id', connectionRequestId)
+    .neq('sender_id', userId)
+    .is('read_at', null)
+    .select('id, read_at')
+
+  if (error) throw error
+  return data || []
 }
 
 function mergeConnections(serverConnections, currentConnections) {
@@ -106,7 +148,7 @@ async function fetchConnections() {
   if (acceptedRequestIds.length > 0) {
     const { data: messages, error: messagesError } = await supabase
       .from('messages')
-      .select('id, connection_request_id, sender_id, body, created_at')
+      .select('id, connection_request_id, sender_id, body, created_at, read_at')
       .in('connection_request_id', acceptedRequestIds)
       .order('created_at', { ascending: true })
       .order('id', { ascending: true })
@@ -145,6 +187,7 @@ export default function Matches() {
   const shouldFocusChatRef = useRef(false)
   const confirmationTriggerRef = useRef(null)
   const messageUserIdRef = useRef(null)
+  const activeChatIdRef = useRef(null)
 
   useEffect(() => {
     let isMounted = true
@@ -161,6 +204,24 @@ export default function Matches() {
           messageUserIdRef.current = userId
           setConnections((current) => mergeConnections(nextConnections, current))
           setError('')
+
+          if (
+            activeChatIdRef.current
+            && document.visibilityState === 'visible'
+            && document.hasFocus()
+          ) {
+            void markReceivedMessagesRead(activeChatIdRef.current, userId)
+              .then((receipts) => {
+                if (isMounted) {
+                  setConnections((current) => applyReadReceipts(current, receipts))
+                }
+              })
+              .catch(() => {
+                if (isMounted) {
+                  setError('Chưa đánh dấu được tin nhắn là đã đọc.')
+                }
+              })
+          }
         })
         .finally(() => {
           refreshInFlight = null
@@ -178,22 +239,59 @@ export default function Matches() {
           .channel(`messages:${messageUserIdRef.current}`)
           .on(
             'postgres_changes',
-            { event: 'INSERT', schema: 'public', table: 'messages' },
+            { event: '*', schema: 'public', table: 'messages' },
             (payload) => {
               if (!isMounted || !payload.new?.connection_request_id) return
 
-              const message = mapMessage(payload.new, messageUserIdRef.current)
-              setConnections((current) => current.map((item) => {
-                if (item.id !== payload.new.connection_request_id) return item
-                if (item.messages.some((currentMessage) => currentMessage.id === message.id)) {
-                  return item
-                }
+              if (payload.eventType === 'INSERT') {
+                const message = mapMessage(payload.new, messageUserIdRef.current)
+                setConnections((current) => current.map((item) => {
+                  if (item.id !== payload.new.connection_request_id) return item
+                  if (item.messages.some((currentMessage) => currentMessage.id === message.id)) {
+                    return item
+                  }
 
-                return {
-                  ...item,
-                  messages: mergeMessages(item.messages, [message]),
+                  return {
+                    ...item,
+                    messages: mergeMessages(item.messages, [message]),
+                  }
+                }))
+
+                if (
+                  message.sender === 'other'
+                  && activeChatIdRef.current === payload.new.connection_request_id
+                  && document.visibilityState === 'visible'
+                  && document.hasFocus()
+                ) {
+                  void markReceivedMessagesRead(
+                    payload.new.connection_request_id,
+                    messageUserIdRef.current
+                  )
+                    .then((receipts) => {
+                      if (isMounted) {
+                        setConnections((current) => applyReadReceipts(current, receipts))
+                      }
+                    })
+                    .catch(() => {
+                      if (isMounted) {
+                        setError('Chưa đánh dấu được tin nhắn là đã đọc.')
+                      }
+                    })
                 }
-              }))
+              } else if (payload.eventType === 'UPDATE') {
+                setConnections((current) => current.map((item) => (
+                  item.id === payload.new.connection_request_id
+                    ? {
+                        ...item,
+                        messages: item.messages.map((message) => (
+                          message.id === payload.new.id
+                            ? { ...message, readAt: payload.new.read_at }
+                            : message
+                        )),
+                      }
+                    : item
+                )))
+              }
             }
           )
           .subscribe((status) => {
@@ -216,12 +314,20 @@ export default function Matches() {
       })
     }
 
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        handleWindowFocus()
+      }
+    }
+
     window.addEventListener('focus', handleWindowFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
     void setupMessages()
 
     return () => {
       isMounted = false
       window.removeEventListener('focus', handleWindowFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
       if (messageChannel) void supabase.removeChannel(messageChannel)
     }
   }, [])
@@ -246,6 +352,14 @@ export default function Matches() {
   const acceptedConnections = connections.filter(
     (item) => item.status === 'accepted'
   )
+  const totalUnreadCount = acceptedConnections.reduce(
+    (total, connection) => total + getUnreadMessageCount(connection),
+    0
+  )
+
+  useEffect(() => {
+    activeChatIdRef.current = chat?.id ?? null
+  }, [chat?.id])
 
   useEffect(() => {
     if (chat && shouldFocusChatRef.current) {
@@ -340,17 +454,32 @@ export default function Matches() {
     confirmationTriggerRef.current?.focus({ preventScroll: true })
   }
 
+  async function markConversationRead(id) {
+    const userId = messageUserIdRef.current
+    if (!userId) return
+
+    try {
+      const receipts = await markReceivedMessagesRead(id, userId)
+      setConnections((current) => applyReadReceipts(current, receipts))
+    } catch {
+      setError('Chưa đánh dấu được tin nhắn là đã đọc.')
+    }
+  }
+
   function openChat(id) {
     lastChatTriggerRef.current = document.activeElement
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur()
     }
     shouldFocusChatRef.current = window.matchMedia('(max-width: 760px)').matches
+    activeChatIdRef.current = id
     setChatId(id)
     setDraft('')
+    void markConversationRead(id)
   }
 
   function closeChat() {
+    activeChatIdRef.current = null
     setChatId(null)
     setDraft('')
     lastChatTriggerRef.current?.focus({ preventScroll: true })
@@ -376,7 +505,7 @@ export default function Matches() {
           sender_id: userId,
           body: text,
         })
-        .select('id, connection_request_id, sender_id, body, created_at')
+        .select('id, connection_request_id, sender_id, body, created_at, read_at')
         .single()
 
       if (insertError) throw insertError
@@ -422,6 +551,7 @@ export default function Matches() {
           <div className="matches-summary-stats">
             <span><strong>{pendingCount}</strong> đang chờ</span>
             <span><strong>{acceptedCount}</strong> đã kết nối</span>
+            <span aria-live="polite"><strong>{totalUnreadCount}</strong> chưa đọc</span>
           </div>
         </div>
 
@@ -539,13 +669,15 @@ export default function Matches() {
               <div className="conversation-list-items">
                 {acceptedConnections.map((item) => {
                   const lastMessage = item.messages[item.messages.length - 1]
+                  const unreadCount = getUnreadMessageCount(item)
 
                   return (
                     <button
                       key={item.id}
                       type="button"
-                      className={`conversation-item ${chatId === item.id ? 'active' : ''}`}
+                      className={`conversation-item ${chatId === item.id ? 'active' : ''} ${unreadCount > 0 ? 'has-unread' : ''}`}
                       aria-pressed={chatId === item.id}
+                      aria-label={`${item.name}${unreadCount > 0 ? `, ${unreadCount} tin nhắn chưa đọc` : ''}`}
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => openChat(item.id)}
                     >
@@ -556,6 +688,11 @@ export default function Matches() {
                         <strong>{item.name}</strong>
                         <small>{lastMessage?.text || item.purpose || 'Sẵn sàng trò chuyện'}</small>
                       </span>
+                      {unreadCount > 0 && (
+                        <span className="conversation-unread-badge" aria-hidden="true">
+                          {unreadCount > 99 ? '99+' : unreadCount}
+                        </span>
+                      )}
                     </button>
                   )
                 })}

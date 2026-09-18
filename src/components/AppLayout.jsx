@@ -96,6 +96,7 @@ export default function AppLayout({ children }) {
   const notificationButtonRef = useRef(null)
   const notificationPanelRef = useRef(null)
   const notificationChannelRef = useRef(null)
+  const messageUnreadChannelRef = useRef(null)
   const notificationUserIdRef = useRef(null)
   const notificationsMountedRef = useRef(false)
   const [logoutError, setLogoutError] = useState('')
@@ -104,6 +105,7 @@ export default function AppLayout({ children }) {
   const [notificationsLoading, setNotificationsLoading] = useState(true)
   const [notificationsError, setNotificationsError] = useState('')
   const [notificationAnnouncement, setNotificationAnnouncement] = useState('')
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0)
   const fullName = getProfileName()
   const avatarLetter = fullName.split(/\s+/).pop()[0].toUpperCase()
   const pageTitle = pageTitles[location.pathname] || 'CocoApp'
@@ -138,6 +140,37 @@ export default function AppLayout({ children }) {
     setNotificationsLoading(false)
   }, [])
 
+  const loadUnreadMessageCount = useCallback(async () => {
+    const userId = notificationUserIdRef.current
+    if (!userId) return
+
+    const { data: acceptedRequests, error: requestsError } = await supabase
+      .from('connection_requests')
+      .select('id')
+      .eq('status', 'accepted')
+      .or(`requester_id.eq.${userId},recipient_id.eq.${userId}`)
+
+    if (!notificationsMountedRef.current) return
+    if (requestsError) return
+
+    const requestIds = (acceptedRequests || []).map((request) => request.id)
+    if (requestIds.length === 0) {
+      setUnreadMessageCount(0)
+      return
+    }
+
+    const { count, error } = await supabase
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .in('connection_request_id', requestIds)
+      .neq('sender_id', userId)
+      .is('read_at', null)
+
+    if (notificationsMountedRef.current && !error) {
+      setUnreadMessageCount(count || 0)
+    }
+  }, [])
+
   useEffect(() => {
     mainRef.current?.focus({ preventScroll: true })
   }, [location.pathname])
@@ -152,7 +185,10 @@ export default function AppLayout({ children }) {
         if (!user || cancelled) return
 
         notificationUserIdRef.current = user.id
-        await loadNotifications()
+        await Promise.all([
+          loadNotifications(),
+          loadUnreadMessageCount(),
+        ])
         if (cancelled) return
 
         const channel = supabase
@@ -192,6 +228,19 @@ export default function AppLayout({ children }) {
           })
 
         notificationChannelRef.current = channel
+
+        const messageChannel = supabase
+          .channel(`message-unread:${user.id}`)
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'messages' },
+            () => {
+              void loadUnreadMessageCount()
+            }
+          )
+          .subscribe()
+
+        messageUnreadChannelRef.current = messageChannel
       } catch {
         if (notificationsMountedRef.current) {
           setNotificationsLoading(false)
@@ -202,6 +251,7 @@ export default function AppLayout({ children }) {
 
     function handleWindowFocus() {
       void loadNotifications({ silent: true })
+      void loadUnreadMessageCount()
     }
 
     window.addEventListener('focus', handleWindowFocus)
@@ -217,8 +267,13 @@ export default function AppLayout({ children }) {
         void supabase.removeChannel(notificationChannelRef.current)
         notificationChannelRef.current = null
       }
+
+      if (messageUnreadChannelRef.current) {
+        void supabase.removeChannel(messageUnreadChannelRef.current)
+        messageUnreadChannelRef.current = null
+      }
     }
-  }, [loadNotifications])
+  }, [loadNotifications, loadUnreadMessageCount])
 
   useEffect(() => {
     if (!notificationsOpen) return undefined
@@ -307,6 +362,11 @@ export default function AppLayout({ children }) {
         notificationChannelRef.current = null
       }
 
+      if (messageUnreadChannelRef.current) {
+        await supabase.removeChannel(messageUnreadChannelRef.current)
+        messageUnreadChannelRef.current = null
+      }
+
       window.location.assign('/login')
     } catch {
       setLogoutError('Không thể đăng xuất. Hãy tải lại trang và thử lại.')
@@ -333,12 +393,22 @@ export default function AppLayout({ children }) {
 
         <nav className="sidebar-nav" aria-label="Điều hướng chính">
           {menuItems.map((item) => (
-            <NavLink key={item.to} to={item.to} className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+              aria-label={`${item.label}${item.to === '/matches' && unreadMessageCount > 0 ? `, ${unreadMessageCount} tin nhắn chưa đọc` : ''}`}
+            >
               <span className="sidebar-icon"><Icon name={item.icon}/></span>
               <span className="sidebar-link-copy">
                 <strong>{item.label}</strong>
                 <small>{item.hint}</small>
               </span>
+              {item.to === '/matches' && unreadMessageCount > 0 && (
+                <span className="navigation-unread-badge" aria-hidden="true">
+                  {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
@@ -468,8 +538,18 @@ export default function AppLayout({ children }) {
 
       <nav className="mobile-bottom-nav" aria-label="Điều hướng điện thoại">
         {mobileMenuItems.map((item) => (
-          <NavLink key={item.to} to={item.to} className={({ isActive }) => isActive ? 'active' : ''}>
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={({ isActive }) => isActive ? 'active' : ''}
+            aria-label={`${item.label}${item.to === '/matches' && unreadMessageCount > 0 ? `, ${unreadMessageCount} tin nhắn chưa đọc` : ''}`}
+          >
             <Icon name={item.icon}/><span>{item.label}</span>
+            {item.to === '/matches' && unreadMessageCount > 0 && (
+              <span className="navigation-unread-badge" aria-hidden="true">
+                {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>
