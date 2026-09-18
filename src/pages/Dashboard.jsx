@@ -1,21 +1,32 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AppLayout, { Icon } from '../components/AppLayout'
-import { accountStorage } from '../auth'
+import { getCurrentAccount } from '../auth'
+import { useConnectionRequestRefresh } from '../hooks/useConnectionRequestRefresh'
+import { supabase } from '../lib/supabaseClient'
 
 const profileFields = [
-  'fullName',
+  'full_name',
   'university',
   'major',
-  'studyYear',
+  'study_year',
   'gender',
   'purpose',
   'bio',
   'city',
   'area',
-  'publicLocation',
-  'maxDistance',
+  'public_location',
+  'max_distance_km',
 ]
+
+const purposeLabels = {
+  study_group: 'Học nhóm',
+  team_project: 'Team Project',
+  roommates: 'Ghép trọ',
+}
+
+const dashboardProfileSelect = profileFields.join(', ')
+const dashboardRequestSelect = 'id, requester_id, recipient_id, purpose, status, created_at, requester:profiles!connection_requests_requester_id_fkey(full_name), recipient:profiles!connection_requests_recipient_id_fkey(full_name)'
 
 const quickActions = [
   {
@@ -41,62 +52,85 @@ const quickActions = [
   },
 ]
 
-function readDashboard() {
-  const warnings = []
-  let profile = {}
-  let connections = []
+function mapDashboardConnection(request, userId) {
+  const otherProfile = request.requester_id === userId
+    ? request.recipient
+    : request.requester
 
-  try {
-    const raw = accountStorage.getItem('cocoapp.profile.v1')
-
-    if (raw) {
-      const parsed = JSON.parse(raw)
-
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        throw new Error('Invalid profile')
-      }
-
-      profile = parsed
-    }
-  } catch {
-    warnings.push('Không đọc được hồ sơ đã lưu.')
+  return {
+    id: request.id,
+    name: otherProfile?.full_name?.trim() || 'Sinh viên CocoApp',
+    purpose: purposeLabels[request.purpose] || 'Kết nối sinh viên',
+    status: request.status,
   }
+}
 
-  try {
-    const raw = accountStorage.getItem('cocoapp.connections.v1')
-
-    if (raw) {
-      const parsed = JSON.parse(raw)
-
-      if (
-        !Array.isArray(parsed) ||
-        !parsed.every(
-          (item) =>
-            item &&
-            typeof item.id === 'number' &&
-            typeof item.name === 'string' &&
-            ['pending', 'accepted'].includes(item.status)
-        )
-      ) {
-        throw new Error('Invalid connections')
-      }
-
-      connections = parsed
-    }
-  } catch {
-    warnings.push('Không đọc được danh sách kết nối.')
-  }
-
-  return { profile, connections, warnings }
+function hasProfileValue(value) {
+  if (typeof value === 'number') return Number.isFinite(value)
+  return typeof value === 'string' && value.trim() !== ''
 }
 
 export default function Dashboard() {
-  const [data] = useState(readDashboard)
-  const { profile, connections, warnings } = data
+  const [data, setData] = useState({ profile: {}, connections: [] })
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const isMountedRef = useRef(false)
+  const { profile, connections } = data
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  const loadDashboard = useCallback(async () => {
+    try {
+      const user = await getCurrentAccount()
+      if (!user) throw new Error('Phiên đăng nhập đã hết.')
+
+      const [profileResult, requestsResult] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select(dashboardProfileSelect)
+          .eq('id', user.id)
+          .maybeSingle(),
+        supabase
+          .from('connection_requests')
+          .select(dashboardRequestSelect)
+          .or(`requester_id.eq.${user.id},recipient_id.eq.${user.id}`)
+          .in('status', ['pending', 'accepted'])
+          .order('created_at', { ascending: false }),
+      ])
+
+      if (profileResult.error) throw profileResult.error
+      if (requestsResult.error) throw requestsResult.error
+
+      if (isMountedRef.current) {
+        setData({
+          profile: profileResult.data || {},
+          connections: (requestsResult.data || []).map((request) => (
+            mapDashboardConnection(request, user.id)
+          )),
+        })
+        setLoadError('')
+      }
+    } finally {
+      if (isMountedRef.current) setIsLoading(false)
+    }
+  }, [])
+
+  useConnectionRequestRefresh(loadDashboard, {
+    onError: () => {
+      if (isMountedRef.current) {
+        setLoadError('Không thể tải dữ liệu tổng quan từ Supabase. Hãy thử lại sau.')
+      }
+    },
+  })
 
   const fullName =
-    typeof profile.fullName === 'string'
-      ? profile.fullName.trim()
+    typeof profile.full_name === 'string'
+      ? profile.full_name.trim()
       : ''
 
   const displayName = fullName
@@ -104,9 +138,7 @@ export default function Dashboard() {
     : 'cậu'
 
   const completedFields = profileFields.filter(
-    (key) =>
-      typeof profile[key] === 'string' &&
-      profile[key].trim() !== ''
+    (key) => hasProfileValue(profile[key])
   ).length
 
   const completion = Math.round(
@@ -121,7 +153,7 @@ export default function Dashboard() {
     (item) => item.status === 'accepted'
   ).length
 
-  const recentConnections = connections.slice(-3).reverse()
+  const recentConnections = connections.slice(0, 3)
 
   const dateLabel = new Intl.DateTimeFormat('vi-VN', {
     weekday: 'long',
@@ -143,9 +175,15 @@ export default function Dashboard() {
           </div>
         </header>
 
-        {warnings.length > 0 && (
+        {isLoading && (
+          <div className="dashboard-loading-banner" role="status" aria-live="polite">
+            Đang tải dữ liệu tổng quan từ Supabase…
+          </div>
+        )}
+
+        {loadError && (
           <div className="form-error-banner" role="alert">
-            {warnings.join(' ')} Dữ liệu hiện có chưa bị thay đổi.
+            {loadError}
           </div>
         )}
 

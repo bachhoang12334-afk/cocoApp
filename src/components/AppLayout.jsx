@@ -1,6 +1,7 @@
 import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { accountStorage, getCurrentAccount, logoutAccount } from '../auth'
+import { useConnectionRequestRefresh } from '../hooks/useConnectionRequestRefresh'
 import { supabase } from '../lib/supabaseClient'
 
 const notificationSelect = 'id, recipient_id, actor_id, connection_request_id, type, read_at, created_at, actor:profiles!notifications_actor_id_fkey(full_name)'
@@ -170,6 +171,11 @@ export default function AppLayout({ children }) {
       setUnreadMessageCount(count || 0)
     }
   }, [])
+
+  useConnectionRequestRefresh(loadUnreadMessageCount, {
+    refreshOnMount: false,
+    refreshOnFocus: false,
+  })
 
   useEffect(() => {
     mainRef.current?.focus({ preventScroll: true })
