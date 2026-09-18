@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AppLayout, { Icon } from '../components/AppLayout'
 import { getCurrentAccount } from '../auth'
 import { supabase } from '../lib/supabaseClient'
 import { VIETNAM_LOCATIONS } from '../data/vietnamLocations'
+import { useConnectionRequestRefresh } from '../hooks/useConnectionRequestRefresh'
 
 const purposes = ['Tất cả', 'Học nhóm', 'Team Project', 'Ghép trọ']
 const purposeValues = {
@@ -131,11 +132,22 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
   const [hiddenIds, setHiddenIds] = useState([])
   const dialogRef = useRef(null)
   const lastProfileTriggerRef = useRef(null)
+  const isMountedRef = useRef(false)
+  const refreshPromiseRef = useRef(null)
+  const hasLoadedProfilesRef = useRef(false)
 
   useEffect(() => {
-    let isMounted = true
+    isMountedRef.current = true
 
-    async function loadDiscoverProfiles() {
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  const loadDiscoverProfiles = useCallback(({ resetPreferences = false } = {}) => {
+    if (refreshPromiseRef.current) return refreshPromiseRef.current
+
+    const refreshPromise = (async () => {
       try {
         const user = await getCurrentAccount()
 
@@ -163,11 +175,13 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
 
         const preferences = mapProfilePreferences(ownResult.data)
 
-        if (isMounted) {
+        if (isMountedRef.current) {
           setProfile(preferences)
-          setCity(preferences.city)
-          setArea(preferences.area)
-          setMaxDistance(preferences.maxDistance)
+          if (resetPreferences) {
+            setCity(preferences.city)
+            setArea(preferences.area)
+            setMaxDistance(preferences.maxDistance)
+          }
           setStudents((othersResult.data || []).map(mapProfileToStudent))
           setRequestStatuses(Object.fromEntries(
             (requestResult.data || [])
@@ -180,23 +194,31 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
               ])
           ))
           setLoadError('')
+          hasLoadedProfilesRef.current = true
         }
       } catch (error) {
-        if (isMounted) {
-          setStudents([])
+        if (isMountedRef.current) {
+          if (!hasLoadedProfilesRef.current) setStudents([])
           setLoadError(getDiscoverErrorMessage(error))
         }
       } finally {
-        if (isMounted) setIsLoading(false)
+        if (isMountedRef.current) setIsLoading(false)
       }
-    }
+    })()
 
-    loadDiscoverProfiles()
+    refreshPromiseRef.current = refreshPromise
+    void refreshPromise.finally(() => {
+      if (refreshPromiseRef.current === refreshPromise) {
+        refreshPromiseRef.current = null
+      }
+    })
 
-    return () => {
-      isMounted = false
-    }
+    return refreshPromise
   }, [])
+
+  useConnectionRequestRefresh(() => loadDiscoverProfiles({
+    resetPreferences: !hasLoadedProfilesRef.current,
+  }))
 
   const canFilterRoommates = ['Nam', 'Nữ', 'Khác'].includes(profile.gender)
 
