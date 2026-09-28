@@ -3942,3 +3942,240 @@ textarea:focus-visible {
     padding-inline: 14px;
   }
 }
+
+/* Coco password flashlight */
+.password-flashlight {
+  --password-spot-x: 50%;
+  --password-spot-y: 50%;
+  --password-scroll: 0px;
+  --password-text-left: 14px;
+  position: relative;
+  width: 100%;
+  min-height: 52px;
+  border-radius: 13px;
+  isolation: isolate;
+}
+
+.password-flashlight.has-leading-icon {
+  --password-text-left: 45px;
+}
+
+.password-flashlight .password-flashlight-input {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  padding-right: 58px;
+  padding-left: var(--password-text-left);
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  letter-spacing: .08em;
+}
+
+.password-flashlight .password-flashlight-input::placeholder {
+  font-family: inherit;
+  letter-spacing: normal;
+}
+
+.password-flashlight.login-input-wrapper > svg {
+  z-index: 4;
+}
+
+.password-flashlight.is-flashlight-active .password-flashlight-input {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--coco-primary-dark);
+}
+
+.password-flashlight.is-flashlight-active .password-flashlight-input::placeholder {
+  color: var(--coco-muted);
+  -webkit-text-fill-color: var(--coco-muted);
+}
+
+.password-visual-layer {
+  position: absolute;
+  z-index: 3;
+  top: 1px;
+  right: 58px;
+  bottom: 1px;
+  left: var(--password-text-left);
+  overflow: hidden;
+  color: var(--coco-ink);
+  border-radius: 7px;
+  pointer-events: none;
+}
+
+.password-flashlight:not(.is-flashlight-active) .password-visual-layer {
+  display: none;
+}
+
+.password-mask-layer,
+.password-reveal-layer {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: flex;
+  align-items: center;
+  min-width: max-content;
+  white-space: pre;
+  transform: translateX(var(--password-scroll));
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: inherit;
+  letter-spacing: .08em;
+}
+
+.password-mask-layer {
+  -webkit-mask-image: radial-gradient(
+    circle 54px at calc(var(--password-spot-x) - var(--password-text-left)) var(--password-spot-y),
+    transparent 0 54%,
+    #000 76%
+  );
+  mask-image: radial-gradient(
+    circle 54px at calc(var(--password-spot-x) - var(--password-text-left)) var(--password-spot-y),
+    transparent 0 54%,
+    #000 76%
+  );
+}
+
+.password-reveal-layer {
+  color: var(--coco-primary-dark);
+  text-shadow: 0 0 16px rgba(23, 107, 120, .24);
+  -webkit-mask-image: radial-gradient(
+    circle 58px at calc(var(--password-spot-x) - var(--password-text-left)) var(--password-spot-y),
+    #000 0 52%,
+    transparent 76%
+  );
+  mask-image: radial-gradient(
+    circle 58px at calc(var(--password-spot-x) - var(--password-text-left)) var(--password-spot-y),
+    #000 0 52%,
+    transparent 76%
+  );
+}
+
+.password-flashlight::after {
+  position: absolute;
+  z-index: 2;
+  inset: 1px;
+  border-radius: inherit;
+  background: radial-gradient(
+    circle 66px at var(--password-spot-x) var(--password-spot-y),
+    rgba(164, 233, 225, .34),
+    rgba(255, 255, 255, .08) 55%,
+    transparent 76%
+  );
+  opacity: 0;
+  pointer-events: none;
+  content: "";
+  transition: opacity 140ms ease;
+}
+
+.password-flashlight.is-flashlight-active[data-pointer-inside="true"]::after {
+  opacity: 1;
+}
+
+.password-eye-button {
+  position: absolute;
+  z-index: 6;
+  top: 50%;
+  right: 5px;
+  display: grid;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 9px;
+  place-items: center;
+  transform: translateY(-50%);
+}
+
+.password-eye-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+.password-eye-button:hover:not(:disabled),
+.password-eye-button:focus-visible,
+.password-eye-button[aria-pressed="true"] {
+  color: #fff;
+  outline: none;
+  background: var(--coco-primary-dark);
+  box-shadow: 0 5px 14px rgba(23, 107, 120, .2);
+}
+
+.password-eye-button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.password-coco-orb {
+  position: absolute;
+  z-index: 8;
+  top: -36px;
+  left: var(--password-spot-x);
+  display: grid;
+  width: 34px;
+  height: 34px;
+  color: #fff;
+  border: 2px solid rgba(255, 255, 255, .9);
+  border-radius: 11px;
+  background: var(--coco-primary-dark);
+  box-shadow: 0 8px 22px rgba(16, 78, 89, .25);
+  opacity: 0;
+  pointer-events: none;
+  place-items: center;
+  transform: translate(-50%, 8px) scale(.82);
+  font-size: 17px;
+  font-weight: 900;
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.password-coco-orb span {
+  position: absolute;
+  right: 5px;
+  bottom: 4px;
+  color: var(--coco-coral);
+}
+
+.password-flashlight.is-flashlight-active[data-coco="true"] .password-coco-orb {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+}
+
+.password-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  border: 0;
+  white-space: nowrap;
+}
+
+.password-flashlight.is-keyboard-reveal .password-mask-layer {
+  display: none;
+}
+
+.password-flashlight.is-keyboard-reveal .password-reveal-layer {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .password-flashlight.is-flashlight-active .password-mask-layer {
+    display: none;
+  }
+
+  .password-flashlight.is-flashlight-active .password-reveal-layer {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  .password-coco-orb {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .password-flashlight::after,
+  .password-coco-orb {
+    transition: none;
+  }
+}

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
+import PasswordFlashlightInput from '../components/PasswordFlashlightInput'
 import { registerAccount } from '../auth'
 
 export default function Register() {
@@ -14,8 +15,6 @@ export default function Register() {
     confirmPassword: '',
   })
 
-  const [showPassword, setShowPassword] = useState(false)
-  const [understandDemo, setUnderstandDemo] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
@@ -56,10 +55,6 @@ export default function Register() {
 
     if (form.password !== form.confirmPassword) {
       nextErrors.confirmPassword = 'Hai ô mật khẩu chưa giống nhau.'
-    }
-
-    if (!understandDemo) {
-      nextErrors.understandDemo = 'Hãy xác nhận thông tin lưu trữ trên trình duyệt.'
     }
 
     if (Object.keys(nextErrors).length > 0) {
@@ -124,7 +119,7 @@ export default function Register() {
     {
       name: 'password',
       label: 'Mật khẩu',
-      type: showPassword ? 'text' : 'password',
+      type: 'password',
       placeholder: 'Ít nhất 6 ký tự',
       autoComplete: 'new-password',
       maxLength: 128,
@@ -132,7 +127,7 @@ export default function Register() {
     {
       name: 'confirmPassword',
       label: 'Nhập lại mật khẩu',
-      type: showPassword ? 'text' : 'password',
+      type: 'password',
       placeholder: 'Nhập giống mật khẩu phía trên',
       autoComplete: 'new-password',
       maxLength: 128,
@@ -151,8 +146,8 @@ export default function Register() {
           </header>
 
           <p className="discover-demo-note" id="register-note">
-            Tài khoản được bảo vệ bởi Supabase. Hồ sơ CocoApp vẫn
-            được lưu trên trình duyệt này trong giai đoạn thử nghiệm.
+            Tài khoản và hồ sơ CocoApp được bảo vệ, đồng bộ qua Supabase.
+            Cậu có thể tiếp tục trên thiết bị khác sau khi đăng nhập.
           </p>
 
           {error && (
@@ -181,63 +176,39 @@ export default function Register() {
                   {field.label}
                 </label>
 
-                <input
-                  id={`register-${field.name}`}
-                  name={field.name}
-                  type={field.type}
-                  className="form-input"
-                  value={form[field.name]}
-                  onChange={handleChange}
-                  placeholder={field.placeholder}
-                  autoComplete={field.autoComplete}
-                  maxLength={field.maxLength}
-                  minLength={
-                    field.name === 'password' ||
-                    field.name === 'confirmPassword'
-                      ? 6
-                      : undefined
-                  }
-                  disabled={isLoading}
-                  aria-invalid={Boolean(fieldErrors[field.name])}
-                  aria-describedby={fieldErrors[field.name] ? `register-${field.name}-error` : undefined}
-                />
+                {field.type === 'password' ? (
+                  <PasswordFlashlightInput
+                    id={`register-${field.name}`}
+                    name={field.name}
+                    value={form[field.name]}
+                    onChange={handleChange}
+                    placeholder={field.placeholder}
+                    autoComplete={field.autoComplete}
+                    minLength={6}
+                    maxLength={field.maxLength}
+                    disabled={isLoading}
+                    invalid={Boolean(fieldErrors[field.name])}
+                    describedBy={fieldErrors[field.name] ? `register-${field.name}-error` : undefined}
+                  />
+                ) : (
+                  <input
+                    id={`register-${field.name}`}
+                    name={field.name}
+                    type={field.type}
+                    className="form-input"
+                    value={form[field.name]}
+                    onChange={handleChange}
+                    placeholder={field.placeholder}
+                    autoComplete={field.autoComplete}
+                    maxLength={field.maxLength}
+                    disabled={isLoading}
+                    aria-invalid={Boolean(fieldErrors[field.name])}
+                    aria-describedby={fieldErrors[field.name] ? `register-${field.name}-error` : undefined}
+                  />
+                )}
                 {fieldErrors[field.name] && <small id={`register-${field.name}-error`} className="auth-field-error">{fieldErrors[field.name]}</small>}
               </div>
             ))}
-
-            <label className="checkbox-label">
-              <input
-                id="register-show-password"
-                type="checkbox"
-                className="custom-checkbox"
-                checked={showPassword}
-                onChange={(event) =>
-                  setShowPassword(event.target.checked)
-                }
-              />
-              <span>Hiện cả hai ô mật khẩu</span>
-            </label>
-
-            <label className="checkbox-label">
-              <input
-                id="register-understand-demo"
-                type="checkbox"
-                className="custom-checkbox"
-                checked={understandDemo}
-                onChange={(event) => {
-                  setUnderstandDemo(event.target.checked)
-                  setError('')
-                }}
-                disabled={isLoading}
-                required
-                aria-invalid={Boolean(fieldErrors.understandDemo)}
-                aria-describedby={fieldErrors.understandDemo ? 'register-understand-demo-error' : undefined}
-              />
-              <span>
-                Tôi hiểu hồ sơ CocoApp chỉ được lưu trên trình duyệt này.
-              </span>
-            </label>
-            {fieldErrors.understandDemo && <small id="register-understand-demo-error" className="auth-field-error auth-checkbox-error">{fieldErrors.understandDemo}</small>}
 
             <button
               type="submit"

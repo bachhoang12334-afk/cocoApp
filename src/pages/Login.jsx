@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
+import PasswordFlashlightInput from '../components/PasswordFlashlightInput'
 import { loginAccount } from '../auth'
 
 export default function Login() {
@@ -9,7 +10,6 @@ export default function Login() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
@@ -186,43 +186,18 @@ export default function Login() {
               <div className="login-field">
                 <label htmlFor="login-password">Mật khẩu</label>
 
-                <div className="login-input-wrapper">
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    aria-hidden="true"
-                  >
-                    <rect x="4" y="10" width="16" height="11" rx="3" />
-                    <path d="M8 10V7a4 4 0 0 1 8 0v3" />
-                  </svg>
-
-                  <input
-                    id="login-password"
-                    name="password"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Nhập mật khẩu đã đăng ký"
-                    value={password}
-                    onChange={(event) => handleFieldChange('password', event.target.value)}
-                    autoComplete="current-password"
-                    disabled={isLoading}
-                    aria-invalid={Boolean(fieldErrors.password)}
-                    aria-describedby={fieldErrors.password ? 'login-password-error' : undefined}
-                  />
-
-                  <button
-                    type="button"
-                    className="password-toggle"
-                    aria-label={
-                      showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'
-                    }
-                    aria-pressed={showPassword}
-                    onClick={() => setShowPassword((current) => !current)}
-                  >
-                    {showPassword ? 'Ẩn' : 'Hiện'}
-                  </button>
-                </div>
+                <PasswordFlashlightInput
+                  id="login-password"
+                  name="password"
+                  value={password}
+                  onChange={(event) => handleFieldChange('password', event.target.value)}
+                  placeholder="Nhập mật khẩu đã đăng ký"
+                  autoComplete="current-password"
+                  disabled={isLoading}
+                  invalid={Boolean(fieldErrors.password)}
+                  describedBy={fieldErrors.password ? 'login-password-error' : undefined}
+                  variant="login"
+                />
                 {fieldErrors.password && <small id="login-password-error" className="auth-field-error">{fieldErrors.password}</small>}
               </div>
 
@@ -242,8 +217,8 @@ export default function Login() {
             </div>
 
             <p className="login-safety">
-              Tài khoản chỉ dùng trên trình duyệt đã đăng ký.
-              Dùng máy khác, cậu cần đăng ký trên máy đó.
+              Tài khoản và hồ sơ được đồng bộ an toàn qua Supabase.
+              Cậu có thể đăng nhập trên thiết bị khác.
             </p>
           </div>
         </div>
