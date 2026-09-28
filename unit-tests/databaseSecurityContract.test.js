@@ -18,6 +18,10 @@ const readStatusMigration = await readFile(
   new URL('../supabase/migrations/20260917000005_add_message_read_status.sql', import.meta.url),
   'utf8'
 )
+const profileSyncMigration = await readFile(
+  new URL('../supabase/migrations/20260917000006_sync_profile_registration_metadata.sql', import.meta.url),
+  'utf8'
+)
 
 test('connection schema permits reconnect only after the previous active row is closed', () => {
   assert.match(
@@ -49,4 +53,23 @@ test('message updates expose only read_at and protect content fields', () => {
   assert.match(readStatusMigration, /sender_id <> \(select auth\.uid\(\)\)/)
   assert.match(readStatusMigration, /new\.body is distinct from old\.body/)
   assert.doesNotMatch(readStatusMigration, /grant delete/i)
+})
+
+test('registration metadata initializes only public profile identity fields', () => {
+  assert.match(
+    profileSyncMigration,
+    /insert into public\.profiles \(id, full_name, university\)/
+  )
+  assert.match(
+    profileSyncMigration,
+    /nullif\(btrim\(new\.raw_user_meta_data ->> 'university'\), ''\)/
+  )
+  assert.match(
+    profileSyncMigration,
+    /alter publication supabase_realtime add table public\.profiles/
+  )
+  assert.doesNotMatch(
+    profileSyncMigration,
+    /alter publication supabase_realtime add table public\.profile_private/
+  )
 })

@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import AppLayout, { Icon } from '../components/AppLayout'
-import { getCurrentAccount, accountStorage } from '../auth'
+import { getCurrentAccount } from '../auth'
 import { supabase } from '../lib/supabaseClient'
-
-const STORAGE_KEY = 'cocoapp.profile.v1'
 
 const defaultProfile = {
   fullName: '',
@@ -13,9 +11,9 @@ const defaultProfile = {
   gender: '',
   purpose: '',
   bio: '',
-   city: '',
+  city: '',
   area: '',
-  publicLocation: '',   
+  publicLocation: '',
   maxDistance: '3',
 }
 
@@ -50,46 +48,6 @@ const fieldLabels = {
   maxDistance: 'Khoảng cách mong muốn',
 }
 
-function readProfile() {
-  try {
-    const raw = accountStorage.getItem(STORAGE_KEY)
-
-    if (!raw) {
-      return { data: { ...defaultProfile }, warning: '' }
-    }
-
-    const stored = JSON.parse(raw)
-
-    if (!stored || typeof stored !== 'object' || Array.isArray(stored)) {
-      throw new Error('Invalid profile')
-    }
-
-    const data = { ...defaultProfile }
-
-    for (const key of Object.keys(defaultProfile)) {
-      if (typeof stored[key] === 'string') {
-        data[key] = stored[key]
-      }
-    }
-
-    for (const [key, options] of Object.entries(selectOptions)) {
-      if (!options.includes(data[key])) {
-        data[key] = defaultProfile[key]
-      }
-    }
-
-    data.bio = data.bio.slice(0, 180)
-
-    return { data, warning: '' }
-  } catch {
-    return {
-      data: { ...defaultProfile },
-      warning:
-        'Không đọc được hồ sơ đã lưu. Cậu có thể nhập lại; dữ liệu cũ chưa bị ghi đè.',
-    }
-  }
-}
-
 function profileFromSupabase(profile) {
   if (!profile) return { ...defaultProfile }
 
@@ -108,20 +66,6 @@ function profileFromSupabase(profile) {
   }
 }
 
-function isNearlyEmptyProfile(profile) {
-  return [
-    'university',
-    'major',
-    'studyYear',
-    'gender',
-    'purpose',
-    'bio',
-    'city',
-    'area',
-    'publicLocation',
-  ].every((field) => !profile[field])
-}
-
 function getProfileErrorMessage(error, action) {
   const message = error?.message?.toLowerCase() || ''
 
@@ -133,11 +77,10 @@ function getProfileErrorMessage(error, action) {
 }
 
 export default function Profile() {
-  const [initial] = useState(readProfile)
-  const [formData, setFormData] = useState(initial.data)
-  const [savedProfile, setSavedProfile] = useState(initial.data)
+  const [formData, setFormData] = useState(() => ({ ...defaultProfile }))
+  const [savedProfile, setSavedProfile] = useState(() => ({ ...defaultProfile }))
   const [saved, setSaved] = useState(false)
-  const [error, setError] = useState(initial.warning)
+  const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
   const [privateProfile, setPrivateProfile] = useState({
     phone: null,
@@ -192,15 +135,11 @@ export default function Profile() {
         if (publicError) throw publicError
         if (privateError) throw privateError
 
-        const supabaseProfile = profileFromSupabase(publicProfile)
-        const legacyProfile = initial.data
-        const shouldUseLegacy = isNearlyEmptyProfile(supabaseProfile) &&
-          JSON.stringify(legacyProfile) !== JSON.stringify(defaultProfile)
-        const loadedProfile = shouldUseLegacy ? legacyProfile : supabaseProfile
+        const loadedProfile = profileFromSupabase(publicProfile)
 
         if (isMounted) {
           setFormData(loadedProfile)
-          setSavedProfile(shouldUseLegacy ? supabaseProfile : loadedProfile)
+          setSavedProfile(loadedProfile)
           setPrivateProfile(privateData || {
             phone: null,
             exact_address: null,
@@ -226,7 +165,7 @@ export default function Profile() {
     return () => {
       isMounted = false
     }
-  }, [initial.data])
+  }, [])
 
   useEffect(() => {
     function handleBeforeUnload(event) {
@@ -398,6 +337,9 @@ export default function Profile() {
       setFieldErrors({})
       setError('')
       setSaved(true)
+      window.dispatchEvent(new CustomEvent('cocoapp:profile-updated', {
+        detail: { fullName: savedData.fullName },
+      }))
     } catch (saveError) {
       setError(getProfileErrorMessage(saveError, 'lưu'))
     } finally {

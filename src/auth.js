@@ -1,7 +1,5 @@
 import { supabase } from './lib/supabaseClient'
 
-let currentUser = null
-
 function getVietnameseAuthError(error) {
   const message = error?.message?.toLowerCase() || ''
 
@@ -22,27 +20,6 @@ function getVietnameseAuthError(error) {
   }
 
   return new Error('Đã xảy ra lỗi xác thực. Hãy thử lại sau.')
-}
-
-function createLocalProfile(userId, fullName, university) {
-  const profileKey = `cocoapp.user.${userId}.cocoapp.profile.v1`
-  const profile = {
-    fullName: fullName.trim(),
-    university: university.trim(),
-    major: '',
-    studyYear: '',
-    gender: '',
-    purpose: '',
-    bio: '',
-    city: '',
-    area: '',
-    publicLocation: '',
-    maxDistance: '3',
-    hidePhone: true,
-    hideExactAddress: true,
-  }
-
-  localStorage.setItem(profileKey, JSON.stringify(profile))
 }
 
 export async function registerAccount({
@@ -78,12 +55,6 @@ export async function registerAccount({
 
   if (error) throw getVietnameseAuthError(error)
 
-  if (data.user) {
-    createLocalProfile(data.user.id, fullName, university)
-  }
-
-  currentUser = data.session?.user || null
-
   return {
     requiresEmailConfirmation: Boolean(data.user && !data.session),
   }
@@ -92,18 +63,12 @@ export async function registerAccount({
 export async function loginAccount(email, password) {
   const normalizedEmail = email.trim().toLowerCase()
 
-  const { data, error } = await supabase.auth.signInWithPassword({
+  const { error } = await supabase.auth.signInWithPassword({
     email: normalizedEmail,
     password,
   })
 
   if (error) throw getVietnameseAuthError(error)
-
-  currentUser = data.user
-}
-
-export function currentAccount() {
-  return currentUser
 }
 
 export async function getCurrentAccount() {
@@ -111,14 +76,12 @@ export async function getCurrentAccount() {
 
   if (error) throw getVietnameseAuthError(error)
 
-  currentUser = data.session?.user || null
-  return currentUser
+  return data.session?.user || null
 }
 
 export function subscribeToAuthState(callback) {
   const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-    currentUser = session?.user || null
-    callback(currentUser)
+    callback(session?.user || null)
   })
 
   return () => data.subscription.unsubscribe()
@@ -128,26 +91,4 @@ export async function logoutAccount() {
   const { error } = await supabase.auth.signOut()
 
   if (error) throw getVietnameseAuthError(error)
-
-  currentUser = null
-}
-
-function getAccountKey(key) {
-  const account = currentAccount()
-
-  if (!account) {
-    throw new Error('Phiên đăng nhập đã hết. Hãy đăng nhập lại.')
-  }
-
-  return `cocoapp.user.${account.id}.${key}`
-}
-
-export const accountStorage = {
-  getItem(key) {
-    return localStorage.getItem(getAccountKey(key))
-  },
-
-  setItem(key, value) {
-    localStorage.setItem(getAccountKey(key), value)
-  },
 }

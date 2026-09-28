@@ -1,6 +1,6 @@
 import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { accountStorage, getCurrentAccount, logoutAccount } from '../auth'
+import { getCurrentAccount, logoutAccount } from '../auth'
 import { useConnectionRequestRefresh } from '../hooks/useConnectionRequestRefresh'
 import { supabase } from '../lib/supabaseClient'
 
@@ -30,15 +30,9 @@ function formatNotificationTime(value) {
   }).format(date)
 }
 
-function getProfileName() {
-  try {
-    const profile = JSON.parse(accountStorage.getItem('cocoapp.profile.v1') || 'null')
-    return typeof profile?.fullName === 'string'
-      ? profile.fullName.trim() || 'Sinh viên'
-      : 'Sinh viên'
-  } catch {
-    return 'Sinh viên'
-  }
+function getAuthProfileName(user) {
+  const name = user?.user_metadata?.fullName || user?.user_metadata?.full_name
+  return typeof name === 'string' ? name.trim() : ''
 }
 
 export function Icon({ name }) {
@@ -98,6 +92,7 @@ export default function AppLayout({ children }) {
   const notificationPanelRef = useRef(null)
   const notificationChannelRef = useRef(null)
   const messageUnreadChannelRef = useRef(null)
+  const profileChannelRef = useRef(null)
   const notificationUserIdRef = useRef(null)
   const notificationsMountedRef = useRef(false)
   const [logoutError, setLogoutError] = useState('')
@@ -107,8 +102,9 @@ export default function AppLayout({ children }) {
   const [notificationsError, setNotificationsError] = useState('')
   const [notificationAnnouncement, setNotificationAnnouncement] = useState('')
   const [unreadMessageCount, setUnreadMessageCount] = useState(0)
-  const fullName = getProfileName()
-  const avatarLetter = fullName.split(/\s+/).pop()[0].toUpperCase()
+  const [profileName, setProfileName] = useState('Sinh viên')
+  const fullName = profileName.trim() || 'Sinh viên'
+  const avatarLetter = fullName.split(/\s+/).pop()?.[0]?.toUpperCase() || 'S'
   const pageTitle = pageTitles[location.pathname] || 'CocoApp'
   const unreadNotificationCount = notifications.filter(
     (notification) => notification.read_at === null
@@ -172,6 +168,25 @@ export default function AppLayout({ children }) {
     }
   }, [])
 
+  const loadProfileIdentity = useCallback(async () => {
+    const userId = notificationUserIdRef.current
+    if (!userId) return
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', userId)
+      .maybeSingle()
+
+    if (
+      notificationsMountedRef.current
+      && !error
+      && data?.full_name?.trim()
+    ) {
+      setProfileName(data.full_name.trim())
+    }
+  }, [])
+
   useConnectionRequestRefresh(loadUnreadMessageCount, {
     refreshOnMount: false,
     refreshOnFocus: false,
@@ -191,9 +206,11 @@ export default function AppLayout({ children }) {
         if (!user || cancelled) return
 
         notificationUserIdRef.current = user.id
+        setProfileName(getAuthProfileName(user) || 'Sinh viên')
         await Promise.all([
           loadNotifications(),
           loadUnreadMessageCount(),
+          loadProfileIdentity(),
         ])
         if (cancelled) return
 
@@ -247,6 +264,27 @@ export default function AppLayout({ children }) {
           .subscribe()
 
         messageUnreadChannelRef.current = messageChannel
+
+        const profileChannel = supabase
+          .channel(`profile-identity:${user.id}`)
+          .on(
+            'postgres_changes',
+            {
+              event: 'UPDATE',
+              schema: 'public',
+              table: 'profiles',
+              filter: `id=eq.${user.id}`,
+            },
+            (payload) => {
+              const nextName = payload.new?.full_name?.trim()
+              if (nextName) setProfileName(nextName)
+            }
+          )
+          .subscribe((status) => {
+            if (status === 'SUBSCRIBED') void loadProfileIdentity()
+          })
+
+        profileChannelRef.current = profileChannel
       } catch {
         if (notificationsMountedRef.current) {
           setNotificationsLoading(false)
@@ -258,9 +296,16 @@ export default function AppLayout({ children }) {
     function handleWindowFocus() {
       void loadNotifications({ silent: true })
       void loadUnreadMessageCount()
+      void loadProfileIdentity()
+    }
+
+    function handleProfileUpdated(event) {
+      const nextName = event.detail?.fullName?.trim()
+      if (nextName) setProfileName(nextName)
     }
 
     window.addEventListener('focus', handleWindowFocus)
+    window.addEventListener('cocoapp:profile-updated', handleProfileUpdated)
     void setupNotifications()
 
     return () => {
@@ -268,6 +313,7 @@ export default function AppLayout({ children }) {
       notificationsMountedRef.current = false
       notificationUserIdRef.current = null
       window.removeEventListener('focus', handleWindowFocus)
+      window.removeEventListener('cocoapp:profile-updated', handleProfileUpdated)
 
       if (notificationChannelRef.current) {
         void supabase.removeChannel(notificationChannelRef.current)
@@ -278,8 +324,13 @@ export default function AppLayout({ children }) {
         void supabase.removeChannel(messageUnreadChannelRef.current)
         messageUnreadChannelRef.current = null
       }
+
+      if (profileChannelRef.current) {
+        void supabase.removeChannel(profileChannelRef.current)
+        profileChannelRef.current = null
+      }
     }
-  }, [loadNotifications, loadUnreadMessageCount])
+  }, [loadNotifications, loadProfileIdentity, loadUnreadMessageCount])
 
   useEffect(() => {
     if (!notificationsOpen) return undefined
@@ -371,6 +422,11 @@ export default function AppLayout({ children }) {
       if (messageUnreadChannelRef.current) {
         await supabase.removeChannel(messageUnreadChannelRef.current)
         messageUnreadChannelRef.current = null
+      }
+
+      if (profileChannelRef.current) {
+        await supabase.removeChannel(profileChannelRef.current)
+        profileChannelRef.current = null
       }
 
       window.location.assign('/login')
