@@ -43,6 +43,7 @@ export function Icon({ name }) {
     team: <><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2"/><path d="M16 5.2a3 3 0 0 1 0 5.6"/><path d="M18 13.4A6 6 0 0 1 21 19v2"/></>,
     room: <><path d="m3 11 9-7 9 7"/><path d="M5.5 9.5V20h13V9.5"/><path d="M9 14h6"/></>,
     connection: <><path d="M8.5 12a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M2.5 21v-2a6 6 0 0 1 12 0v2"/><path d="M16 8h5m-2.5-2.5V10.5"/></>,
+    safety: <><path d="M12 3 5 6v5c0 4.8 2.8 8.2 7 10 4.2-1.8 7-5.2 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-4"/></>,
     profile: <><circle cx="12" cy="8" r="3.2"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/></>,
     bell: <><path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></>,
     logout: <><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M14 3h4a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-4"/></>,
@@ -64,6 +65,7 @@ const menuItems = [
   { to: '/team', icon: 'team', label: 'Team Project', hint: 'Cùng làm dự án' },
   { to: '/roommates', icon: 'room', label: 'Ghép trọ', hint: 'Ở cùng an toàn' },
   { to: '/matches', icon: 'connection', label: 'Kết nối', hint: 'Lời mời & chat' },
+  { to: '/safety', icon: 'safety', label: 'An toàn', hint: 'Chặn & báo cáo' },
 ]
 
 const mobileMenuItems = [
@@ -80,6 +82,7 @@ const pageTitles = {
   '/team': 'Tìm team project',
   '/roommates': 'Tìm bạn ghép trọ',
   '/matches': 'Kết nối của bạn',
+  '/safety': 'Trung tâm an toàn',
   '/profile': 'Hồ sơ cá nhân',
 }
 

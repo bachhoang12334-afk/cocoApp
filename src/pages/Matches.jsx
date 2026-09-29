@@ -12,6 +12,7 @@ import {
   normalizeMessagePage,
 } from '../lib/messageState'
 import { supabase } from '../lib/supabaseClient'
+import SafetyActions from '../components/SafetyActions'
 
 const purposeLabels = {
   study_group: 'Học nhóm',
@@ -26,6 +27,7 @@ function mapRequest(request, userId, messagePagesByRequest) {
 
   return {
     id: request.id,
+    profileId: otherProfile?.id,
     name: otherProfile?.full_name?.trim() || 'Sinh viên CocoApp',
     major: otherProfile?.major?.trim() || 'Chưa cập nhật ngành học',
     purpose: purposeLabels[request.purpose] || 'Kết nối',
@@ -55,6 +57,10 @@ function getMatchesErrorMessage(error) {
 }
 
 function getMessageErrorMessage(error) {
+  if (error?.message?.toLowerCase().includes('blocked')) {
+    return 'Không thể gửi tin nhắn vì kết nối này đã bị chặn.'
+  }
+
   if (error?.message?.toLowerCase().includes('row-level security')) {
     return 'Không thể gửi tin nhắn. Hãy kiểm tra kết nối vẫn đang được chấp nhận.'
   }
@@ -635,6 +641,24 @@ export default function Matches() {
     }
   }
 
+  function handleBlocked(profileId, name) {
+    const blockedConnectionIds = connections
+      .filter((item) => item.profileId === profileId)
+      .map((item) => item.id)
+
+    setConnections((current) => current.filter((item) => item.profileId !== profileId))
+    if (chatId && blockedConnectionIds.includes(chatId)) {
+      activeChatIdRef.current = null
+      setChatId(null)
+      setDraft('')
+    }
+    setStatusMessage(`Đã chặn ${name}. Kết nối và tin nhắn mới đã được dừng.`)
+  }
+
+  function handleReported(_profileId, name) {
+    setStatusMessage(`Đã gửi báo cáo về ${name}. Nội dung báo cáo được giữ kín.`)
+  }
+
   return (
     <AppLayout>
       <section className="discover-page matches-page">
@@ -843,6 +867,17 @@ export default function Matches() {
                   >
                     Ngắt kết nối
                   </button>
+                  {chat.profileId && (
+                    <SafetyActions
+                      targetId={chat.profileId}
+                      targetName={chat.name}
+                      connectionRequestId={chat.id}
+                      messageId={chat.messages.filter((message) => message.sender === 'other').at(-1)?.id || null}
+                      onBlocked={handleBlocked}
+                      onReported={handleReported}
+                      compact
+                    />
+                  )}
                 </header>
 
                 <div
@@ -996,6 +1031,16 @@ export default function Matches() {
                         Ngắt kết nối
                       </button>
                     </>
+                  )}
+                  {item.profileId && (
+                    <SafetyActions
+                      targetId={item.profileId}
+                      targetName={item.name}
+                      connectionRequestId={item.id}
+                      onBlocked={handleBlocked}
+                      onReported={handleReported}
+                      compact
+                    />
                   )}
                 </div>
               </article>

@@ -5,6 +5,7 @@ import { getCurrentAccount } from '../auth'
 import { supabase } from '../lib/supabaseClient'
 import { VIETNAM_LOCATIONS } from '../data/vietnamLocations'
 import { useConnectionRequestRefresh } from '../hooks/useConnectionRequestRefresh'
+import SafetyActions from '../components/SafetyActions'
 
 const purposes = ['Tất cả', 'Học nhóm', 'Team Project', 'Ghép trọ']
 const purposeValues = {
@@ -104,6 +105,10 @@ function getRequestErrorMessage(error) {
     return 'Đã có lời mời đang chờ hoặc kết nối giữa hai tài khoản.'
   }
 
+  if (message.includes('users cannot connect while blocked')) {
+    return 'Không thể kết nối với tài khoản này do cài đặt an toàn.'
+  }
+
   return 'Chưa gửi được lời mời. Hãy thử lại sau.'
 }
 
@@ -127,6 +132,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
   const [isFiltersOpen, setIsFiltersOpen] = useState(false)
   const [undoStudent, setUndoStudent] = useState(null)
   const [requestError, setRequestError] = useState('')
+  const [safetyStatus, setSafetyStatus] = useState('')
   const [requestStatuses, setRequestStatuses] = useState({})
   const [sendingIds, setSendingIds] = useState({})
   const [hiddenIds, setHiddenIds] = useState([])
@@ -159,10 +165,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
             .select('gender, city, area, max_distance_km')
             .eq('id', user.id)
             .maybeSingle(),
-          supabase
-            .from('profiles')
-            .select('id, full_name, gender, major, purpose, city, area, public_location, bio')
-            .neq('id', user.id),
+          supabase.rpc('get_discover_profiles'),
           supabase
             .from('connection_requests')
             .select('recipient_id, requester_id, purpose, status')
@@ -351,6 +354,16 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
     closeProfile(false)
   }
 
+  function handleBlocked(profileId, name) {
+    setStudents((current) => current.filter((student) => student.profileId !== profileId))
+    setSelectedId(null)
+    setSafetyStatus(`Đã chặn ${name}. Lời mời hoặc kết nối hiện tại đã được đóng.`)
+  }
+
+  function handleReported(_profileId, name) {
+    setSafetyStatus(`Đã gửi báo cáo về ${name}. Nội dung báo cáo được giữ kín.`)
+  }
+
   return (
     <AppLayout>
       <section className="discover-page">
@@ -393,6 +406,12 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
         {requestError && (
           <div className="form-error-banner" role="alert" aria-live="assertive">
             {requestError}
+          </div>
+        )}
+
+        {safetyStatus && (
+          <div className="matches-status-message" role="status" aria-live="polite">
+            <Icon name="safety" /> {safetyStatus}
           </div>
         )}
 
@@ -600,6 +619,14 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
                               ? 'Đang gửi…'
                               : 'Kết nối'}
                       </button>
+
+                      <SafetyActions
+                        targetId={student.profileId}
+                        targetName={student.name}
+                        onBlocked={handleBlocked}
+                        onReported={handleReported}
+                        compact
+                      />
                     </div>
                   </article>
                 )

@@ -14,6 +14,7 @@ import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
 import Discover from './pages/Discover'
 import Matches from './pages/Matches'
+import SafetyCenter from './pages/SafetyCenter'
 import {
   getCurrentAccount,
   subscribeToAuthState,
@@ -129,6 +130,11 @@ export default function App() {
         <Route
           path="/matches"
           element={protectedPage(<Matches />, account, isCheckingSession)}
+        />
+
+        <Route
+          path="/safety"
+          element={protectedPage(<SafetyCenter />, account, isCheckingSession)}
         />
 
         <Route

@@ -22,6 +22,10 @@ const profileSyncMigration = await readFile(
   new URL('../supabase/migrations/20260917000006_sync_profile_registration_metadata.sql', import.meta.url),
   'utf8'
 )
+const safetyMigration = await readFile(
+  new URL('../supabase/migrations/20260917000007_create_safety_tools.sql', import.meta.url),
+  'utf8'
+)
 
 test('connection schema permits reconnect only after the previous active row is closed', () => {
   assert.match(
@@ -72,4 +76,21 @@ test('registration metadata initializes only public profile identity fields', ()
     profileSyncMigration,
     /alter publication supabase_realtime add table public\.profile_private/
   )
+})
+
+test('blocking is owner-controlled and closes active connections', () => {
+  assert.match(safetyMigration, /alter table public\.user_blocks enable row level security/)
+  assert.match(safetyMigration, /using \(blocker_id = \(select auth\.uid\(\)\)\)/)
+  assert.match(safetyMigration, /update public\.connection_requests[\s\S]*set status = 'cancelled'[\s\S]*status in \('pending', 'accepted'\)/i)
+  assert.match(safetyMigration, /Users cannot connect while blocked/)
+  assert.match(safetyMigration, /create or replace function public\.get_discover_profiles\(\)/)
+})
+
+test('reports remain private and clients cannot edit or delete them', () => {
+  assert.match(safetyMigration, /alter table public\.user_reports enable row level security/)
+  assert.match(safetyMigration, /using \(reporter_id = \(select auth\.uid\(\)\)\)/)
+  assert.match(safetyMigration, /grant insert \([\s\S]*category,[\s\S]*details[\s\S]*\) on table public\.user_reports/)
+  assert.doesNotMatch(safetyMigration, /grant update(?:\s|\([^)]*\))*on table public\.user_reports/i)
+  assert.doesNotMatch(safetyMigration, /grant delete on table public\.user_reports/i)
+  assert.match(safetyMigration, /user_reports_open_context_idx/)
 })
