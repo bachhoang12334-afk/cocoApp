@@ -1,4 +1,5 @@
 import { supabase } from './lib/supabaseClient'
+import { normalizeAndValidateEmail } from './lib/authSecurity'
 
 function getVietnameseAuthError(error) {
   const message = error?.message?.toLowerCase() || ''
@@ -19,6 +20,30 @@ function getVietnameseAuthError(error) {
     return new Error('Mật khẩu cần ít nhất 6 ký tự.')
   }
 
+  if (
+    message.includes('rate limit')
+    || message.includes('email rate limit')
+    || message.includes('security purposes')
+  ) {
+    return new Error('Cậu thao tác hơi nhanh. Hãy đợi một lúc rồi thử lại.')
+  }
+
+  if (
+    message.includes('expired')
+    || message.includes('invalid token')
+    || message.includes('session missing')
+  ) {
+    return new Error('Liên kết đã hết hạn hoặc không hợp lệ. Hãy yêu cầu email mới.')
+  }
+
+  if (message.includes('same password')) {
+    return new Error('Mật khẩu mới cần khác mật khẩu đang dùng.')
+  }
+
+  if (message.includes('fetch') || message.includes('network')) {
+    return new Error('Không kết nối được tới máy chủ. Hãy kiểm tra mạng và thử lại.')
+  }
+
   return new Error('Đã xảy ra lỗi xác thực. Hãy thử lại sau.')
 }
 
@@ -28,7 +53,7 @@ export async function registerAccount({
   university,
   password,
 }) {
-  const normalizedEmail = email.trim().toLowerCase()
+  const normalizedEmail = normalizeAndValidateEmail(email)
 
   if (!fullName.trim() || !university.trim()) {
     throw new Error('Hãy nhập họ tên và trường đại học.')
@@ -61,7 +86,7 @@ export async function registerAccount({
 }
 
 export async function loginAccount(email, password) {
-  const normalizedEmail = email.trim().toLowerCase()
+  const normalizedEmail = normalizeAndValidateEmail(email)
 
   const { error } = await supabase.auth.signInWithPassword({
     email: normalizedEmail,
@@ -69,6 +94,48 @@ export async function loginAccount(email, password) {
   })
 
   if (error) throw getVietnameseAuthError(error)
+}
+
+export async function requestPasswordReset(email, redirectTo) {
+  const normalizedEmail = normalizeAndValidateEmail(email)
+  const { error } = await supabase.auth.resetPasswordForEmail(
+    normalizedEmail,
+    { redirectTo }
+  )
+
+  if (error) throw getVietnameseAuthError(error)
+}
+
+export async function resendSignupConfirmation(email, redirectTo) {
+  const normalizedEmail = normalizeAndValidateEmail(email)
+  const { error } = await supabase.auth.resend({
+    type: 'signup',
+    email: normalizedEmail,
+    options: { emailRedirectTo: redirectTo },
+  })
+
+  if (error) throw getVietnameseAuthError(error)
+}
+
+export async function updateAccountPassword(password) {
+  if (password.length < 6 || !password.trim()) {
+    throw new Error('Mật khẩu cần ít nhất 6 ký tự, không chỉ là dấu cách.')
+  }
+
+  const { data, error } = await supabase.auth.getSession()
+
+  if (error) throw getVietnameseAuthError(error)
+  if (!data.session) {
+    throw new Error('Liên kết đã hết hạn hoặc không hợp lệ. Hãy yêu cầu email mới.')
+  }
+
+  const { error: updateError } = await supabase.auth.updateUser({ password })
+
+  if (updateError) throw getVietnameseAuthError(updateError)
+
+  const { error: signOutError } = await supabase.auth.signOut({ scope: 'global' })
+
+  if (signOutError) throw getVietnameseAuthError(signOutError)
 }
 
 export async function getCurrentAccount() {
@@ -80,8 +147,8 @@ export async function getCurrentAccount() {
 }
 
 export function subscribeToAuthState(callback) {
-  const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-    callback(session?.user || null)
+  const { data } = supabase.auth.onAuthStateChange((event, session) => {
+    callback(session?.user || null, event)
   })
 
   return () => data.subscription.unsubscribe()

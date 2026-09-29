@@ -79,6 +79,7 @@ export default function Register() {
         state: {
           registered: true,
           requiresEmailConfirmation: result.requiresEmailConfirmation,
+          email: form.email.trim().toLowerCase(),
         },
       })
     } catch (error) {

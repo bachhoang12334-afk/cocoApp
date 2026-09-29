@@ -2,15 +2,20 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
 import PasswordFlashlightInput from '../components/PasswordFlashlightInput'
-import { loginAccount } from '../auth'
+import { loginAccount, resendSignupConfirmation } from '../auth'
 
 export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
 
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(location.state?.email || '')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isResending, setIsResending] = useState(false)
+  const [needsEmailConfirmation, setNeedsEmailConfirmation] = useState(
+    Boolean(location.state?.requiresEmailConfirmation)
+  )
+  const [confirmationSent, setConfirmationSent] = useState(false)
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
   const errorRef = useRef(null)
@@ -54,12 +59,44 @@ export default function Login() {
     try {
       await loginAccount(email, password)
       navigate('/dashboard', { replace: true })
-    } catch (error) {
+    } catch (loginError) {
+      if (loginError.message?.includes('chưa được xác nhận')) {
+        setNeedsEmailConfirmation(true)
+      }
       setError(
-        error.message || 'Không đăng nhập được. Hãy thử lại sau.'
+        loginError.message || 'Không đăng nhập được. Hãy thử lại sau.'
       )
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  async function handleResendConfirmation() {
+    if (isResending) return
+
+    if (!email.trim()) {
+      setFieldErrors({ email: 'Nhập email cần nhận lại thư xác nhận.' })
+      setError('Hãy nhập email trước khi gửi lại thư xác nhận.')
+      return
+    }
+
+    setError('')
+    setFieldErrors({})
+    setIsResending(true)
+
+    try {
+      await resendSignupConfirmation(
+        email,
+        `${window.location.origin}/login`
+      )
+      setConfirmationSent(true)
+    } catch (resendError) {
+      setError(
+        resendError.message
+        || 'Chưa thể gửi lại email xác nhận. Hãy thử lại sau.'
+      )
+    } finally {
+      setIsResending(false)
     }
   }
 
@@ -126,7 +163,11 @@ export default function Login() {
               <p>Đăng nhập bằng tài khoản cậu đã đăng ký.</p>
             </div>
 
-            {location.state?.requiresEmailConfirmation ? (
+            {location.state?.passwordReset ? (
+              <div className="discover-demo-note auth-success-note" role="status">
+                Mật khẩu đã được cập nhật. Các phiên cũ đã đăng xuất; cậu có thể đăng nhập lại ngay.
+              </div>
+            ) : location.state?.requiresEmailConfirmation ? (
               <div className="discover-demo-note" role="status">
                 Tài khoản đã được tạo. Hãy kiểm tra email để xác nhận
                 tài khoản trước khi đăng nhập.
@@ -137,6 +178,12 @@ export default function Login() {
                 để đăng nhập.
               </div>
             ) : null}
+
+            {confirmationSent && (
+              <div className="discover-demo-note auth-success-note" role="status" aria-live="polite">
+                Đã gửi lại email xác nhận. Hãy kiểm tra cả hộp thư rác.
+              </div>
+            )}
 
             {error && (
               <div ref={errorRef} className="form-error-banner auth-error-summary" role="alert" tabIndex="-1">
@@ -184,7 +231,12 @@ export default function Login() {
               </div>
 
               <div className="login-field">
-                <label htmlFor="login-password">Mật khẩu</label>
+                <div className="login-label-row">
+                  <label htmlFor="login-password">Mật khẩu</label>
+                  <Link className="forgot-password" to="/forgot-password">
+                    Quên mật khẩu?
+                  </Link>
+                </div>
 
                 <PasswordFlashlightInput
                   id="login-password"
@@ -210,6 +262,20 @@ export default function Login() {
                 {!isLoading && <span aria-hidden="true">→</span>}
               </button>
             </form>
+
+            {needsEmailConfirmation && (
+              <div className="auth-resend-row">
+                <span>Chưa nhận được email xác nhận?</span>
+                <button
+                  type="button"
+                  className="auth-text-button"
+                  onClick={handleResendConfirmation}
+                  disabled={isResending}
+                >
+                  {isResending ? 'Đang gửi…' : 'Gửi lại email'}
+                </button>
+              </div>
+            )}
 
             <div className="login-register">
               <span>Chưa có tài khoản?</span>
