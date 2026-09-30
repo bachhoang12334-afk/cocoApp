@@ -15,6 +15,13 @@ import {
   normalizeConnectionInvite,
 } from '../lib/connectionInvite'
 import DataRecoveryState from '../components/DataRecoveryState'
+import {
+  COLLABORATION_STYLE_OPTIONS,
+  COMMITMENT_LEVEL_OPTIONS,
+  getAvailabilityLabel,
+  getPreferenceOption,
+  normalizeAvailabilitySlots,
+} from '../lib/matchingPreferences'
 
 const purposes = ['Tất cả', 'Học nhóm', 'Team Project', 'Ghép trọ']
 const purposeValues = {
@@ -63,6 +70,17 @@ function mapProfileToStudent(profile) {
   const major = profile.major?.trim() || 'Chưa cập nhật ngành học'
   const city = profile.city?.trim() || 'Chưa cập nhật tỉnh / thành phố'
   const area = profile.area?.trim() || 'Chưa cập nhật khu vực'
+  const availabilitySlots = normalizeAvailabilitySlots(profile.availability_slots)
+  const collaborationStyle = profile.collaboration_style?.trim() || ''
+  const commitmentLevel = profile.commitment_level?.trim() || ''
+  const collaborationOption = getPreferenceOption(
+    COLLABORATION_STYLE_OPTIONS,
+    collaborationStyle
+  )
+  const commitmentOption = getPreferenceOption(
+    COMMITMENT_LEVEL_OPTIONS,
+    commitmentLevel
+  )
 
   return {
     id: stableNumericId(profile.id),
@@ -80,6 +98,14 @@ function mapProfileToStudent(profile) {
     email_confirmed: profile.email_confirmed === true,
     education_email: profile.education_email === true,
     verification_status: profile.verification_status || 'unverified',
+    availabilitySlots,
+    collaborationStyle,
+    commitmentLevel,
+    preferenceLabels: [
+      ...availabilitySlots.map((slot) => getAvailabilityLabel(slot, { short: true })),
+      collaborationOption?.label,
+      commitmentOption ? `${commitmentOption.label} · ${commitmentOption.description}` : '',
+    ].filter(Boolean),
   }
 }
 
@@ -90,6 +116,9 @@ function mapProfilePreferences(profile) {
     purpose: profile?.purpose?.trim() || '',
     city: profile?.city?.trim() || '',
     area: profile?.area?.trim() || '',
+    availabilitySlots: normalizeAvailabilitySlots(profile?.availability_slots),
+    collaborationStyle: profile?.collaboration_style?.trim() || '',
+    commitmentLevel: profile?.commitment_level?.trim() || '',
     maxDistance: ['1', '3', '5', '10'].includes(String(profile?.max_distance_km))
       ? String(profile.max_distance_km)
       : '5',
@@ -137,6 +166,9 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
     purpose: '',
     city: '',
     area: '',
+    availabilitySlots: [],
+    collaborationStyle: '',
+    commitmentLevel: '',
     maxDistance: '5',
   })
   const [students, setStudents] = useState([])
@@ -188,7 +220,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
         const [ownResult, othersResult, requestResult] = await Promise.all([
           supabase
             .from('profiles')
-            .select('gender, major, purpose, city, area, max_distance_km')
+            .select('gender, major, purpose, city, area, max_distance_km, availability_slots, collaboration_style, commitment_level')
             .eq('id', user.id)
             .maybeSingle(),
           supabase.rpc('get_discover_profiles'),
@@ -306,6 +338,9 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
     area: area || (!city || normalize(city) === normalize(profile.city)
       ? profile.area
       : ''),
+    availabilitySlots: profile.availabilitySlots,
+    collaborationStyle: profile.collaborationStyle,
+    commitmentLevel: profile.commitmentLevel,
   }
 
   const rankedStudents = sortMode === 'fit'
@@ -640,7 +675,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
               <span className="coco-fit-explainer-icon" aria-hidden="true"><Icon name="spark" /></span>
               <div>
                 <h2 id="coco-fit-title">Biết lý do trước khi gửi lời mời.</h2>
-                <p>Coco chỉ so sánh mục tiêu, ngành và khu vực công khai. Kết quả là gợi ý để cậu tự đánh giá, không phải bảo đảm tương hợp hay an toàn.</p>
+                <p>Coco chỉ so sánh mục tiêu, ngành, khu vực và nhịp cộng tác công khai. Kết quả là gợi ý để cậu tự đánh giá, không phải bảo đảm tương hợp hay an toàn.</p>
               </div>
               <Link to="/profile">Cập nhật tiêu chí <Icon name="arrow" /></Link>
             </section>
@@ -700,6 +735,14 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
                         <span key={skill}>{skill}</span>
                       ))}
                     </div>
+
+                    {student.preferenceLabels.length > 0 && (
+                      <div className="student-preference-list compact" aria-label={`Nhịp cộng tác của ${student.name}`}>
+                        {student.preferenceLabels.slice(0, 2).map((label) => (
+                          <span key={label}>{label}</span>
+                        ))}
+                      </div>
+                    )}
 
                     <div className={`coco-fit-summary ${student.fit.level}`}>
                       <span className="coco-fit-label"><Icon name="spark" /> {student.fit.label}</span>
@@ -840,6 +883,17 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
                   <span>Khu vực gần đúng</span>
                   <p>{locationText(selectedStudent)}</p>
                   <small>Không hiển thị số nhà hoặc thông tin liên hệ cá nhân.</small>
+                </div>
+                <div className="discover-dialog-section">
+                  <span>Nhịp làm việc mong muốn</span>
+                  {selectedStudent.preferenceLabels.length > 0 ? (
+                    <div className="student-preference-list">
+                      {selectedStudent.preferenceLabels.map((label) => <span key={label}>{label}</span>)}
+                    </div>
+                  ) : (
+                    <p>Chưa chia sẻ khung giờ hoặc cách cộng tác.</p>
+                  )}
+                  <small>Chỉ hiển thị khung thời gian rộng, không hiển thị lịch học hoặc địa điểm cụ thể.</small>
                 </div>
                 <div className="discover-dialog-section">
                   <span>Kỹ năng và điểm chung</span>

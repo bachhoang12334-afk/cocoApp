@@ -1,3 +1,11 @@
+import {
+  COLLABORATION_STYLE_OPTIONS,
+  COMMITMENT_LEVEL_OPTIONS,
+  getAvailabilityLabel,
+  getPreferenceOption,
+  normalizeAvailabilitySlots,
+} from './matchingPreferences.js'
+
 function normalize(value) {
   return String(value ?? '')
     .normalize('NFD')
@@ -25,6 +33,43 @@ export function getMatchSignals(preferences = {}, candidate = {}) {
   if (sameValue(preferences.purpose, candidate.purpose)) {
     rank += 4
     reasons.push(`Cùng mục tiêu ${candidate.purpose}`)
+  }
+
+  const preferredAvailability = normalizeAvailabilitySlots(preferences.availabilitySlots)
+  const candidateAvailability = normalizeAvailabilitySlots(candidate.availabilitySlots)
+  const sharedAvailability = preferredAvailability.filter((slot) => candidateAvailability.includes(slot))
+
+  if (sharedAvailability.length > 0) {
+    rank += Math.min(3, sharedAvailability.length + 1)
+    reasons.push(
+      sharedAvailability.length === 1
+        ? `Cùng rảnh ${getAvailabilityLabel(sharedAvailability[0]).toLowerCase()}`
+        : `Trùng ${sharedAvailability.length} khung giờ rảnh`
+    )
+  }
+
+  if (sameValue(preferences.collaborationStyle, candidate.collaborationStyle)) {
+    const style = getPreferenceOption(
+      COLLABORATION_STYLE_OPTIONS,
+      candidate.collaborationStyle
+    )
+
+    if (style) {
+      rank += 2
+      reasons.push(`Cùng thích ${style.label.toLowerCase()}`)
+    }
+  }
+
+  if (sameValue(preferences.commitmentLevel, candidate.commitmentLevel)) {
+    const commitment = getPreferenceOption(
+      COMMITMENT_LEVEL_OPTIONS,
+      candidate.commitmentLevel
+    )
+
+    if (commitment) {
+      rank += 2
+      reasons.push(`Cùng mức cam kết ${commitment.label.toLowerCase()}`)
+    }
   }
 
   if (sameValue(preferences.major, candidate.major)) {
@@ -55,11 +100,11 @@ export function getMatchSignals(preferences = {}, candidate = {}) {
     reasons.push('Có thông tin công khai để cậu tự đánh giá')
   }
 
-  if (rank >= 6) {
+  if (rank >= 8) {
     return { rank, level: 'strong', label: 'Nhiều điểm chung', reasons }
   }
 
-  if (rank >= 3) {
+  if (rank >= 4) {
     return { rank, level: 'good', label: 'Phù hợp tiêu chí', reasons }
   }
 

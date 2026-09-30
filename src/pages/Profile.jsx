@@ -5,6 +5,13 @@ import { supabase } from '../lib/supabaseClient'
 import TrustBadge from '../components/TrustBadge'
 import { getTrustSignal } from '../lib/trustSignals'
 import DataRecoveryState from '../components/DataRecoveryState'
+import {
+  AVAILABILITY_OPTIONS,
+  COLLABORATION_STYLE_OPTIONS,
+  COMMITMENT_LEVEL_OPTIONS,
+  getPreferenceOption,
+  normalizeAvailabilitySlots,
+} from '../lib/matchingPreferences'
 
 const defaultProfile = {
   fullName: '',
@@ -18,6 +25,9 @@ const defaultProfile = {
   area: '',
   publicLocation: '',
   maxDistance: '3',
+  availabilitySlots: [],
+  collaborationStyle: '',
+  commitmentLevel: '',
 }
 
 const selectOptions = {
@@ -66,6 +76,9 @@ function profileFromSupabase(profile) {
     area: profile.area || '',
     publicLocation: profile.public_location || '',
     maxDistance: String(profile.max_distance_km || 3),
+    availabilitySlots: normalizeAvailabilitySlots(profile.availability_slots),
+    collaborationStyle: profile.collaboration_style || '',
+    commitmentLevel: profile.commitment_level || '',
   }
 }
 
@@ -107,9 +120,9 @@ export default function Profile() {
   const isDirty = JSON.stringify(formData) !== JSON.stringify(savedProfile) ||
     phone !== savedPhone
 
-  const completedFields = Object.values(formData).filter(
-    (value) => value.trim() !== ''
-  ).length
+  const completedFields = Object.values(formData).filter((value) => (
+    Array.isArray(value) ? value.length > 0 : value.trim() !== ''
+  )).length
 
   const completion = Math.round(
     (completedFields / Object.keys(defaultProfile).length) * 100
@@ -117,6 +130,14 @@ export default function Profile() {
 
   const lastName = formData.fullName.trim().split(/\s+/).pop()
   const avatarLetter = lastName ? lastName[0].toUpperCase() : '?'
+  const collaborationStyle = getPreferenceOption(
+    COLLABORATION_STYLE_OPTIONS,
+    formData.collaborationStyle
+  )
+  const commitmentLevel = getPreferenceOption(
+    COMMITMENT_LEVEL_OPTIONS,
+    formData.commitmentLevel
+  )
 
   const loadProfile = useCallback(async () => {
     setIsLoadingProfile(true)
@@ -132,7 +153,7 @@ export default function Profile() {
       const [{ data: publicProfile, error: publicError }, { data: privateData, error: privateError }] = await Promise.all([
         supabase
           .from('profiles')
-          .select('id, full_name, university, major, study_year, gender, purpose, bio, city, area, public_location, max_distance_km, email_confirmed, education_email, verification_status')
+          .select('id, full_name, university, major, study_year, gender, purpose, bio, city, area, public_location, max_distance_km, availability_slots, collaboration_style, commitment_level, email_confirmed, education_email, verification_status')
           .eq('id', user.id)
           .maybeSingle(),
         supabase
@@ -238,6 +259,19 @@ export default function Profile() {
     })
   }
 
+  function handleAvailabilityChange(event) {
+    const { checked, value } = event.target
+
+    setFormData((current) => ({
+      ...current,
+      availabilitySlots: checked
+        ? normalizeAvailabilitySlots([...current.availabilitySlots, value])
+        : current.availabilitySlots.filter((slot) => slot !== value),
+    }))
+    setSaved(false)
+    setError('')
+  }
+
   function handleBlur(event) {
     const { name, value } = event.target
 
@@ -277,7 +311,7 @@ export default function Profile() {
     const cleaned = Object.fromEntries(
       Object.entries(formData).map(([key, value]) => [
         key,
-        value.trim(),
+        Array.isArray(value) ? normalizeAvailabilitySlots(value) : value.trim(),
       ])
     )
 
@@ -326,8 +360,11 @@ export default function Profile() {
           area: cleaned.area,
           public_location: cleaned.publicLocation,
           max_distance_km: Number(cleaned.maxDistance),
+          availability_slots: cleaned.availabilitySlots,
+          collaboration_style: cleaned.collaborationStyle,
+          commitment_level: cleaned.commitmentLevel,
         })
-        .select('id, full_name, university, major, study_year, gender, purpose, bio, city, area, public_location, max_distance_km, email_confirmed, education_email, verification_status')
+        .select('id, full_name, university, major, study_year, gender, purpose, bio, city, area, public_location, max_distance_km, availability_slots, collaboration_style, commitment_level, email_confirmed, education_email, verification_status')
         .single()
 
       if (publicError) throw publicError
@@ -396,6 +433,25 @@ export default function Profile() {
           ))}
         </select>
         {fieldErrors[name] && <small id={errorId} className="profile-field-error">{fieldErrors[name]}</small>}
+      </label>
+    )
+  }
+
+  function renderPreferenceSelect(name, label, options) {
+    return (
+      <label className="profile-field">
+        {fieldLabel(name, label, true)}
+        <select id={`profile-${name}`} name={name} value={formData[name]} onChange={handleChange}>
+          <option value="">Chưa chọn</option>
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+        {formData[name] && (
+          <small className="profile-field-hint">
+            {getPreferenceOption(options, formData[name])?.description}
+          </small>
+        )}
       </label>
     )
   }
@@ -530,6 +586,14 @@ export default function Profile() {
                 <span>Mục tiêu</span>
                 <strong>{formData.purpose || 'Chưa chọn'}</strong>
               </div>
+              <div>
+                <span>Cách cộng tác</span>
+                <strong>{collaborationStyle?.label || 'Chưa chọn'}</strong>
+              </div>
+              <div>
+                <span>Mức cam kết</span>
+                <strong>{commitmentLevel?.label || 'Chưa chọn'}</strong>
+              </div>
             </div>
           </aside>
 
@@ -647,6 +711,59 @@ export default function Profile() {
             <div className="profile-form-section">
               <div className="profile-section-heading">
                 <span>03</span>
+                <div>
+                  <h2>Nhịp làm việc phù hợp</h2>
+                  <p>Chia sẻ khung giờ rộng và cách cộng tác để Coco Fit tìm điểm chung thực tế hơn.</p>
+                </div>
+              </div>
+
+              <fieldset className="profile-choice-field" aria-describedby="availability-help">
+                <legend>
+                  Khung giờ thường rảnh <em>Không bắt buộc</em>
+                </legend>
+                <p id="availability-help">
+                  Chỉ chọn buổi chung; không nhập lịch học, phòng học hoặc địa điểm cụ thể.
+                </p>
+                <div className="profile-choice-list">
+                  {AVAILABILITY_OPTIONS.map((option) => (
+                    <label className="profile-choice-card" key={option.value}>
+                      <input
+                        type="checkbox"
+                        value={option.value}
+                        checked={formData.availabilitySlots.includes(option.value)}
+                        onChange={handleAvailabilityChange}
+                      />
+                      <span>{option.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
+              <div className="profile-form-grid profile-preference-grid">
+                {renderPreferenceSelect(
+                  'collaborationStyle',
+                  'Phong cách cộng tác',
+                  COLLABORATION_STYLE_OPTIONS
+                )}
+                {renderPreferenceSelect(
+                  'commitmentLevel',
+                  'Mức cam kết mỗi tuần',
+                  COMMITMENT_LEVEL_OPTIONS
+                )}
+              </div>
+
+              <div className="profile-preference-note">
+                <Icon name="spark" />
+                <p>
+                  Coco chỉ dùng các lựa chọn công khai này để giải thích điểm chung.
+                  Đây không phải điểm đánh giá con người hay cam kết bắt buộc.
+                </p>
+              </div>
+            </div>
+
+            <div className="profile-form-section">
+              <div className="profile-section-heading">
+                <span>04</span>
                 <div>
                   <h2>Khu vực và quyền riêng tư</h2>
                   <p>Số điện thoại và địa chỉ chính xác được bảo vệ riêng tư.</p>

@@ -34,7 +34,14 @@ const connectionIntroMigration = await readFile(
   new URL('../supabase/migrations/20260917000009_add_connection_request_intros.sql', import.meta.url),
   'utf8'
 )
+const matchingPreferencesMigration = await readFile(
+  new URL('../supabase/migrations/20260917000010_add_matching_preferences.sql', import.meta.url),
+  'utf8'
+)
 const discoverTrustFunction = trustMigration.match(
+  /create function public\.get_discover_profiles\(\)[\s\S]*?\$\$;/
+)?.[0] || ''
+const discoverPreferencesFunction = matchingPreferencesMigration.match(
   /create function public\.get_discover_profiles\(\)[\s\S]*?\$\$;/
 )?.[0] || ''
 
@@ -130,4 +137,16 @@ test('public discovery exposes trust booleans without exposing Auth email or pri
   assert.doesNotMatch(discoverTrustFunction, /profile_private/)
   assert.doesNotMatch(discoverTrustFunction, /users\.email/i)
   assert.doesNotMatch(trustMigration, /verification_status\s*=\s*'verified'/i)
+})
+
+test('matching preferences stay broad, validated, and separate from private profile data', () => {
+  assert.match(matchingPreferencesMigration, /add column if not exists availability_slots text\[\]/)
+  assert.match(matchingPreferencesMigration, /cardinality\(availability_slots\) <= 6/)
+  assert.match(matchingPreferencesMigration, /profiles_collaboration_style_allowed/)
+  assert.match(matchingPreferencesMigration, /profiles_commitment_level_allowed/)
+  assert.match(discoverPreferencesFunction, /profile\.availability_slots/)
+  assert.match(discoverPreferencesFunction, /profile\.collaboration_style/)
+  assert.match(discoverPreferencesFunction, /profile\.commitment_level/)
+  assert.doesNotMatch(discoverPreferencesFunction, /profile_private|exact_address|phone/i)
+  assert.match(matchingPreferencesMigration, /grant execute on function public\.get_discover_profiles\(\) to authenticated/)
 })
