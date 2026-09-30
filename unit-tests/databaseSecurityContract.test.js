@@ -26,6 +26,17 @@ const safetyMigration = await readFile(
   new URL('../supabase/migrations/20260917000007_create_safety_tools.sql', import.meta.url),
   'utf8'
 )
+const trustMigration = await readFile(
+  new URL('../supabase/migrations/20260917000008_add_profile_trust_signals.sql', import.meta.url),
+  'utf8'
+)
+const connectionIntroMigration = await readFile(
+  new URL('../supabase/migrations/20260917000009_add_connection_request_intros.sql', import.meta.url),
+  'utf8'
+)
+const discoverTrustFunction = trustMigration.match(
+  /create function public\.get_discover_profiles\(\)[\s\S]*?\$\$;/
+)?.[0] || ''
 
 test('connection schema permits reconnect only after the previous active row is closed', () => {
   assert.match(
@@ -40,6 +51,15 @@ test('connection schema permits reconnect only after the previous active row is 
     disconnectMigration,
     /Participants can disconnect accepted requests/
   )
+})
+
+test('connection invitation intros are required for new requests and immutable after sending', () => {
+  assert.match(connectionIntroMigration, /add column if not exists intro_message text/)
+  assert.match(connectionIntroMigration, /char_length\(intro_message\) between 8 and 240/)
+  assert.match(connectionIntroMigration, /if tg_op = 'INSERT'/)
+  assert.match(connectionIntroMigration, /intro cannot be changed after sending/i)
+  assert.match(connectionIntroMigration, /before insert or update on public\.connection_requests/)
+  assert.doesNotMatch(connectionIntroMigration, /notifications|profile_private/i)
 })
 
 test('message inserts require an accepted connection and the authenticated sender', () => {
@@ -93,4 +113,21 @@ test('reports remain private and clients cannot edit or delete them', () => {
   assert.doesNotMatch(safetyMigration, /grant update(?:\s|\([^)]*\))*on table public\.user_reports/i)
   assert.doesNotMatch(safetyMigration, /grant delete on table public\.user_reports/i)
   assert.match(safetyMigration, /user_reports_open_context_idx/)
+})
+
+test('profile trust signals are derived from Auth and protected from clients', () => {
+  assert.match(trustMigration, /new\.email_confirmed_at is not null/)
+  assert.match(trustMigration, /check \(not education_email or email_confirmed\)/)
+  assert.match(trustMigration, /Profile trust signals are managed by Supabase Auth/)
+  assert.match(trustMigration, /after update of email, email_confirmed_at on auth\.users/)
+  assert.match(trustMigration, /revoke all on function public\.sync_profile_auth_trust\(\) from public/)
+})
+
+test('public discovery exposes trust booleans without exposing Auth email or private profile data', () => {
+  assert.match(discoverTrustFunction, /profile\.email_confirmed/)
+  assert.match(discoverTrustFunction, /profile\.education_email/)
+  assert.match(discoverTrustFunction, /profile\.verification_status/)
+  assert.doesNotMatch(discoverTrustFunction, /profile_private/)
+  assert.doesNotMatch(discoverTrustFunction, /users\.email/i)
+  assert.doesNotMatch(trustMigration, /verification_status\s*=\s*'verified'/i)
 })

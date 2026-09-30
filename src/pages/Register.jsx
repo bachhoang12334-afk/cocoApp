@@ -108,6 +108,7 @@ export default function Register() {
       placeholder: 'tenban@example.com',
       autoComplete: 'email',
       maxLength: 254,
+      hint: 'Dùng email trường nếu có để nhận tín hiệu Email trường đã xác nhận. Tín hiệu này không tự động xác minh tư cách sinh viên.',
     },
     {
       name: 'university',
@@ -189,7 +190,10 @@ export default function Register() {
                     maxLength={field.maxLength}
                     disabled={isLoading}
                     invalid={Boolean(fieldErrors[field.name])}
-                    describedBy={fieldErrors[field.name] ? `register-${field.name}-error` : undefined}
+                    describedBy={[
+                      field.hint ? `register-${field.name}-hint` : '',
+                      fieldErrors[field.name] ? `register-${field.name}-error` : '',
+                    ].filter(Boolean).join(' ') || undefined}
                   />
                 ) : (
                   <input
@@ -204,9 +208,13 @@ export default function Register() {
                     maxLength={field.maxLength}
                     disabled={isLoading}
                     aria-invalid={Boolean(fieldErrors[field.name])}
-                    aria-describedby={fieldErrors[field.name] ? `register-${field.name}-error` : undefined}
+                    aria-describedby={[
+                      field.hint ? `register-${field.name}-hint` : '',
+                      fieldErrors[field.name] ? `register-${field.name}-error` : '',
+                    ].filter(Boolean).join(' ') || undefined}
                   />
                 )}
+                {field.hint && <small id={`register-${field.name}-hint`} className="auth-field-hint">{field.hint}</small>}
                 {fieldErrors[field.name] && <small id={`register-${field.name}-error`} className="auth-field-error">{fieldErrors[field.name]}</small>}
               </div>
             ))}

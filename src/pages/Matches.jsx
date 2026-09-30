@@ -13,6 +13,8 @@ import {
 } from '../lib/messageState'
 import { supabase } from '../lib/supabaseClient'
 import SafetyActions from '../components/SafetyActions'
+import TrustBadge from '../components/TrustBadge'
+import DataRecoveryState from '../components/DataRecoveryState'
 
 const purposeLabels = {
   study_group: 'Học nhóm',
@@ -35,6 +37,10 @@ function mapRequest(request, userId, messagePagesByRequest) {
     area: otherProfile?.area?.trim() || '',
     location: otherProfile?.public_location?.trim() || '',
     about: otherProfile?.bio?.trim() || 'Chưa có giới thiệu.',
+    email_confirmed: otherProfile?.email_confirmed === true,
+    education_email: otherProfile?.education_email === true,
+    verification_status: otherProfile?.verification_status || 'unverified',
+    introMessage: request.intro_message?.trim() || '',
     status: request.status,
     isIncoming,
     requesterId: request.requester_id,
@@ -45,8 +51,8 @@ function mapRequest(request, userId, messagePagesByRequest) {
   }
 }
 
-const profileFields = 'id, full_name, major, purpose, city, area, public_location, bio'
-const requestSelect = `id, requester_id, recipient_id, purpose, status, created_at, responded_at, requester:profiles!connection_requests_requester_id_fkey (${profileFields}), recipient:profiles!connection_requests_recipient_id_fkey (${profileFields})`
+const profileFields = 'id, full_name, major, purpose, city, area, public_location, bio, email_confirmed, education_email, verification_status'
+const requestSelect = `id, requester_id, recipient_id, purpose, intro_message, status, created_at, responded_at, requester:profiles!connection_requests_requester_id_fkey (${profileFields}), recipient:profiles!connection_requests_recipient_id_fkey (${profileFields})`
 
 function getMatchesErrorMessage(error) {
   if (error?.message?.toLowerCase().includes('row-level security')) {
@@ -182,6 +188,7 @@ async function fetchConnections() {
 export default function Matches() {
   const [connections, setConnections] = useState([])
   const [error, setError] = useState('')
+  const [loadError, setLoadError] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [actionId, setActionId] = useState(null)
   const [tab, setTab] = useState('pending')
@@ -199,6 +206,7 @@ export default function Matches() {
   const messageUserIdRef = useRef(null)
   const activeChatIdRef = useRef(null)
   const matchesMountedRef = useRef(false)
+  const hasLoadedConnectionsRef = useRef(false)
   const refreshConnectionsPromiseRef = useRef(null)
 
   useEffect(() => {
@@ -219,6 +227,8 @@ export default function Matches() {
 
         messageUserIdRef.current = userId
         setConnections((current) => mergeConnections(nextConnections, current))
+        hasLoadedConnectionsRef.current = true
+        setLoadError('')
         setError('')
 
         if (
@@ -266,10 +276,28 @@ export default function Matches() {
   useConnectionRequestRefresh(refreshConnections, {
     onError: (loadError) => {
       if (matchesMountedRef.current) {
-        setError(getMatchesErrorMessage(loadError))
+        const message = getMatchesErrorMessage(loadError)
+        if (hasLoadedConnectionsRef.current) {
+          setError(`Chưa làm mới được kết nối. ${message}`)
+        } else {
+          setLoadError(message)
+        }
       }
     },
   })
+
+  async function retryConnections() {
+    setIsLoading(true)
+    setLoadError('')
+
+    try {
+      await refreshConnections()
+    } catch (refreshError) {
+      if (matchesMountedRef.current) {
+        setLoadError(getMatchesErrorMessage(refreshError))
+      }
+    }
+  }
 
   useEffect(() => {
     let messageChannel = null
@@ -683,14 +711,14 @@ export default function Matches() {
             <span className="summary-live-dot" />
             <div><strong>Không gian kết nối của cậu</strong><small>Tin nhắn mới được cập nhật theo thời gian thực.</small></div>
           </div>
-          <div className="matches-summary-stats">
+          {!loadError && <div className="matches-summary-stats">
             <span><strong>{pendingCount}</strong> đang chờ</span>
             <span><strong>{acceptedCount}</strong> đã kết nối</span>
             <span aria-live="polite"><strong>{totalUnreadCount}</strong> chưa đọc</span>
-          </div>
+          </div>}
         </div>
 
-        {error && (
+        {error && !loadError && (
           <div className="form-error-banner" role="alert">
             {error}
           </div>
@@ -702,10 +730,19 @@ export default function Matches() {
           </div>
         )}
 
-        {isLoading && (
+        {isLoading && !loadError && (
           <div className="form-error-banner" role="status" aria-live="polite">
             Đang tải lời mời kết nối…
           </div>
+        )}
+
+        {loadError && !isLoading && (
+          <DataRecoveryState
+            title="Chưa tải được không gian kết nối"
+            message={`${loadError} Dữ liệu không bị xóa; Coco chỉ tạm dừng hiển thị để tránh báo trạng thái sai.`}
+            onRetry={retryConnections}
+            isRetrying={isLoading}
+          />
         )}
 
         {confirmation && (
@@ -745,8 +782,10 @@ export default function Matches() {
           </div>
         )}
 
-        <div className="purpose-tabs matches-tabs" role="tablist" aria-label="Trạng thái kết nối">
-          <button
+        {!loadError && (
+          <>
+            <div className="purpose-tabs matches-tabs" role="tablist" aria-label="Trạng thái kết nối">
+              <button
             type="button"
             className={tab === 'pending' ? 'active' : ''}
             id="pending-tab"
@@ -759,9 +798,9 @@ export default function Matches() {
             }}
           >
             Đang chờ ({pendingCount})
-          </button>
+              </button>
 
-          <button
+              <button
             type="button"
             className={tab === 'accepted' ? 'active' : ''}
             id="accepted-tab"
@@ -774,8 +813,8 @@ export default function Matches() {
             }}
           >
             Đã kết nối ({acceptedCount})
-          </button>
-        </div>
+              </button>
+            </div>
 
         {!isLoading && visibleConnections.length === 0 ? (
           <div id="matches-panel" role="tabpanel" aria-labelledby={`${tab}-tab`} className="discover-empty-state">
@@ -851,6 +890,7 @@ export default function Matches() {
                     <div>
                       <h2 ref={chatHeadingRef} tabIndex="-1">{chat.name}</h2>
                       <p><span className="chat-status-dot" /> Đã kết nối · {chat.purpose || 'Cộng đồng sinh viên'}</p>
+                      <TrustBadge profile={chat} compact />
                     </div>
                   </div>
                   <button
@@ -903,7 +943,15 @@ export default function Matches() {
                   )}
 
                   {chat.messages.length === 0 && (
-                    <p className="chat-empty-message">Chưa có tin nhắn. Hãy gửi lời chào đầu tiên.</p>
+                    <div className="chat-empty-context">
+                      {chat.introMessage && (
+                        <blockquote>
+                          <span>Lời nhắn khi kết nối</span>
+                          <p>{chat.introMessage}</p>
+                        </blockquote>
+                      )}
+                      <p className="chat-empty-message">Chưa có tin nhắn. Hãy tiếp tục từ lý do hai cậu đã kết nối.</p>
+                    </div>
                   )}
 
                   {chat.messages.map((message) => (
@@ -963,6 +1011,7 @@ export default function Matches() {
                 <div className="student-main-info">
                   <h2>{item.name}</h2>
                   <p>{item.major}</p>
+                  <TrustBadge profile={item} compact />
                 </div>
 
                 <span className="student-purpose">{item.purpose}</span>
@@ -980,6 +1029,13 @@ export default function Matches() {
                       : 'Đã gửi lời mời. Chưa thể trò chuyện.'
                     : 'Đã kết nối. Có thể bắt đầu trò chuyện.'}
                 </p>
+
+                {item.introMessage && (
+                  <blockquote className="connection-intro-card">
+                    <span>{item.isIncoming ? 'Lời nhắn gửi cậu' : 'Lời nhắn đã gửi'}</span>
+                    <p>{item.introMessage}</p>
+                  </blockquote>
+                )}
 
                 <div className="student-card-actions">
                   {item.status === 'pending' ? (
@@ -1046,6 +1102,8 @@ export default function Matches() {
               </article>
             ))}
           </div>
+            )}
+          </>
         )}
 
       </section>

@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import AppLayout, { Icon } from '../components/AppLayout'
 import { getCurrentAccount } from '../auth'
 import { supabase } from '../lib/supabaseClient'
+import TrustBadge from '../components/TrustBadge'
+import { getTrustSignal } from '../lib/trustSignals'
+import DataRecoveryState from '../components/DataRecoveryState'
 
 const defaultProfile = {
   fullName: '',
@@ -80,7 +83,13 @@ export default function Profile() {
   const [formData, setFormData] = useState(() => ({ ...defaultProfile }))
   const [savedProfile, setSavedProfile] = useState(() => ({ ...defaultProfile }))
   const [saved, setSaved] = useState(false)
+  const [trustProfile, setTrustProfile] = useState({
+    email_confirmed: false,
+    education_email: false,
+    verification_status: 'unverified',
+  })
   const [error, setError] = useState('')
+  const [loadError, setLoadError] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
   const [privateProfile, setPrivateProfile] = useState({
     phone: null,
@@ -93,6 +102,7 @@ export default function Profile() {
   const [isLoadingProfile, setIsLoadingProfile] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const statusRef = useRef(null)
+  const profileMountedRef = useRef(false)
 
   const isDirty = JSON.stringify(formData) !== JSON.stringify(savedProfile) ||
     phone !== savedPhone
@@ -108,64 +118,72 @@ export default function Profile() {
   const lastName = formData.fullName.trim().split(/\s+/).pop()
   const avatarLetter = lastName ? lastName[0].toUpperCase() : '?'
 
-  useEffect(() => {
-    let isMounted = true
+  const loadProfile = useCallback(async () => {
+    setIsLoadingProfile(true)
+    setLoadError('')
 
-    async function loadProfile() {
-      try {
-        const user = await getCurrentAccount()
+    try {
+      const user = await getCurrentAccount()
 
-        if (!user) {
-          throw new Error('Phiên đăng nhập đã hết.')
-        }
-
-        const [{ data: publicProfile, error: publicError }, { data: privateData, error: privateError }] = await Promise.all([
-          supabase
-            .from('profiles')
-            .select('id, full_name, university, major, study_year, gender, purpose, bio, city, area, public_location, max_distance_km')
-            .eq('id', user.id)
-            .maybeSingle(),
-          supabase
-            .from('profile_private')
-            .select('phone, exact_address, hide_phone, hide_exact_address')
-            .eq('profile_id', user.id)
-            .maybeSingle(),
-        ])
-
-        if (publicError) throw publicError
-        if (privateError) throw privateError
-
-        const loadedProfile = profileFromSupabase(publicProfile)
-
-        if (isMounted) {
-          setFormData(loadedProfile)
-          setSavedProfile(loadedProfile)
-          setPrivateProfile(privateData || {
-            phone: null,
-            exact_address: null,
-            hide_phone: true,
-            hide_exact_address: true,
-          })
-          setPhone(privateData?.phone || '')
-          setSavedPhone(privateData?.phone || '')
-          setSaved(false)
-          setError('')
-        }
-      } catch (loadError) {
-        if (isMounted) {
-          setError(getProfileErrorMessage(loadError, 'tải'))
-        }
-      } finally {
-        if (isMounted) setIsLoadingProfile(false)
+      if (!user) {
+        throw new Error('Phiên đăng nhập đã hết.')
       }
-    }
 
-    loadProfile()
+      const [{ data: publicProfile, error: publicError }, { data: privateData, error: privateError }] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, full_name, university, major, study_year, gender, purpose, bio, city, area, public_location, max_distance_km, email_confirmed, education_email, verification_status')
+          .eq('id', user.id)
+          .maybeSingle(),
+        supabase
+          .from('profile_private')
+          .select('phone, exact_address, hide_phone, hide_exact_address')
+          .eq('profile_id', user.id)
+          .maybeSingle(),
+      ])
 
-    return () => {
-      isMounted = false
+      if (publicError) throw publicError
+      if (privateError) throw privateError
+
+      const loadedProfile = profileFromSupabase(publicProfile)
+
+      if (profileMountedRef.current) {
+        setFormData(loadedProfile)
+        setSavedProfile(loadedProfile)
+        setTrustProfile({
+          email_confirmed: publicProfile?.email_confirmed === true,
+          education_email: publicProfile?.education_email === true,
+          verification_status: publicProfile?.verification_status || 'unverified',
+        })
+        setPrivateProfile(privateData || {
+          phone: null,
+          exact_address: null,
+          hide_phone: true,
+          hide_exact_address: true,
+        })
+        setPhone(privateData?.phone || '')
+        setSavedPhone(privateData?.phone || '')
+        setSaved(false)
+        setError('')
+        setLoadError('')
+      }
+    } catch (profileLoadError) {
+      if (profileMountedRef.current) {
+        setLoadError(getProfileErrorMessage(profileLoadError, 'tải'))
+      }
+    } finally {
+      if (profileMountedRef.current) setIsLoadingProfile(false)
     }
   }, [])
+
+  useEffect(() => {
+    profileMountedRef.current = true
+    void Promise.resolve().then(loadProfile)
+
+    return () => {
+      profileMountedRef.current = false
+    }
+  }, [loadProfile])
 
   useEffect(() => {
     function handleBeforeUnload(event) {
@@ -253,7 +271,7 @@ export default function Profile() {
 
   async function handleSubmit(event) {
     event.preventDefault()
-    if (isSaving || isLoadingProfile) return
+    if (isSaving || isLoadingProfile || loadError) return
     setSaved(false)
 
     const cleaned = Object.fromEntries(
@@ -309,7 +327,7 @@ export default function Profile() {
           public_location: cleaned.publicLocation,
           max_distance_km: Number(cleaned.maxDistance),
         })
-        .select('id, full_name, university, major, study_year, gender, purpose, bio, city, area, public_location, max_distance_km')
+        .select('id, full_name, university, major, study_year, gender, purpose, bio, city, area, public_location, max_distance_km, email_confirmed, education_email, verification_status')
         .single()
 
       if (publicError) throw publicError
@@ -331,6 +349,11 @@ export default function Profile() {
       const savedData = profileFromSupabase(savedPublicProfile)
       setFormData(savedData)
       setSavedProfile(savedData)
+      setTrustProfile({
+        email_confirmed: savedPublicProfile.email_confirmed === true,
+        education_email: savedPublicProfile.education_email === true,
+        verification_status: savedPublicProfile.verification_status || 'unverified',
+      })
       setPrivateProfile(savedPrivateProfile || privateProfile)
       setPhone(savedPrivateProfile?.phone || cleanedPhone)
       setSavedPhone(savedPrivateProfile?.phone || cleanedPhone)
@@ -400,7 +423,7 @@ export default function Profile() {
               type="submit"
               form="profile-form"
               className="profile-save-button"
-              disabled={isLoadingProfile || isSaving}
+              disabled={isLoadingProfile || isSaving || Boolean(loadError)}
             >
               {isSaving ? 'Đang lưu hồ sơ…' : saved ? 'Đã lưu thay đổi' : 'Lưu hồ sơ'}
               <Icon name="arrow" />
@@ -414,17 +437,28 @@ export default function Profile() {
           </div>
         </header>
 
-        <div className="profile-insight-row profile-mobile-summary" aria-label="Tóm tắt hồ sơ">
-          <div><span>Mức hoàn thiện</span><strong>{completion}%</strong></div>
-          <div><span>Mục tiêu</span><strong>{formData.purpose || 'Chưa chọn'}</strong></div>
-          <div><span>Khu vực</span><strong>{formData.area || formData.city || 'Chưa điền'}</strong></div>
-          <div><span>Quyền riêng tư</span><strong>Đang bảo vệ</strong></div>
-        </div>
+        {!isLoadingProfile && !loadError && (
+          <div className="profile-insight-row profile-mobile-summary" aria-label="Tóm tắt hồ sơ">
+            <div><span>Mức hoàn thiện</span><strong>{completion}%</strong></div>
+            <div><span>Mục tiêu</span><strong>{formData.purpose || 'Chưa chọn'}</strong></div>
+            <div><span>Khu vực</span><strong>{formData.area || formData.city || 'Chưa điền'}</strong></div>
+            <div><span>Quyền riêng tư</span><strong>Đang bảo vệ</strong></div>
+          </div>
+        )}
 
         {isLoadingProfile && (
           <div className="profile-loading-message" role="status" aria-live="polite">
             Đang tải hồ sơ…
           </div>
+        )}
+
+        {loadError && !isLoadingProfile && (
+          <DataRecoveryState
+            title="Hồ sơ chưa được tải an toàn"
+            message={`${loadError} Form được khóa để tránh lưu đè dữ liệu đang có.`}
+            onRetry={loadProfile}
+            isRetrying={isLoadingProfile}
+          />
         )}
 
         {error && (
@@ -439,14 +473,14 @@ export default function Profile() {
           </div>
         )}
 
-        {isDirty && (
+        {isDirty && !loadError && (
           <div className="profile-unsaved-notice" role="status" aria-live="polite">
             <span><Icon name="profile" /> Cậu có thay đổi chưa được lưu.</span>
             <button type="submit" form="profile-form">Lưu thay đổi</button>
           </div>
         )}
 
-        <div className="profile-layout">
+        {!isLoadingProfile && !loadError && <div className="profile-layout">
           <aside className="profile-summary-card">
             <div className="profile-avatar-large">
               {avatarLetter}
@@ -455,9 +489,11 @@ export default function Profile() {
             <h2>{formData.fullName || 'Hồ sơ của cậu'}</h2>
             <p>{formData.major || 'Chưa điền ngành học'}</p>
 
-            <span className="verified-student">
-              <Icon name="profile" /> Xác minh tài khoản: Chưa xác minh
-            </span>
+            <div className="profile-trust-summary" aria-live="polite">
+              <p>Coco Trust</p>
+              <TrustBadge profile={trustProfile} />
+              <small>{getTrustSignal(trustProfile).description}</small>
+            </div>
 
             <div className="profile-completion">
               <div className="completion-heading">
@@ -708,7 +744,7 @@ export default function Profile() {
               </div>
             </div>
           </form>
-        </div>
+        </div>}
       </section>
     </AppLayout>
   )

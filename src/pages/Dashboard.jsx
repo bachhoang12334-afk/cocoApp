@@ -4,6 +4,10 @@ import AppLayout, { Icon } from '../components/AppLayout'
 import { getCurrentAccount } from '../auth'
 import { useConnectionRequestRefresh } from '../hooks/useConnectionRequestRefresh'
 import { supabase } from '../lib/supabaseClient'
+import TrustBadge from '../components/TrustBadge'
+import CocoCompass from '../components/CocoCompass'
+import DataRecoveryState from '../components/DataRecoveryState'
+import { getTrustSignal } from '../lib/trustSignals'
 
 const profileFields = [
   'full_name',
@@ -25,13 +29,19 @@ const purposeLabels = {
   roommates: 'Ghép trọ',
 }
 
-const dashboardProfileSelect = profileFields.join(', ')
+const dashboardProfileSelect = [
+  ...profileFields,
+  'email_confirmed',
+  'education_email',
+  'verification_status',
+].join(', ')
 const dashboardRequestSelect = 'id, requester_id, recipient_id, purpose, status, created_at, requester:profiles!connection_requests_requester_id_fkey(full_name), recipient:profiles!connection_requests_recipient_id_fkey(full_name)'
 
 const quickActions = [
   {
     to: '/study',
     icon: 'study',
+    eyebrow: 'HỌC TỐT HƠN',
     title: 'Tìm bạn học',
     text: 'Cùng ôn bài, luyện đề và trao đổi kiến thức.',
     color: 'blue',
@@ -39,6 +49,7 @@ const quickActions = [
   {
     to: '/team',
     icon: 'team',
+    eyebrow: 'LÀM CÙNG NHAU',
     title: 'Tìm team project',
     text: 'Tìm người có kỹ năng phù hợp với dự án.',
     color: 'orange',
@@ -46,6 +57,7 @@ const quickActions = [
   {
     to: '/roommates',
     icon: 'room',
+    eyebrow: 'SỐNG AN TÂM HƠN',
     title: 'Tìm bạn ghép trọ',
     text: 'Lọc theo giới tính, thành phố và khu vực.',
     color: 'green',
@@ -74,6 +86,7 @@ export default function Dashboard() {
   const [data, setData] = useState({ profile: {}, connections: [] })
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
+  const [hasLoadedDashboard, setHasLoadedDashboard] = useState(false)
   const isMountedRef = useRef(false)
   const { profile, connections } = data
 
@@ -107,6 +120,7 @@ export default function Dashboard() {
       if (requestsResult.error) throw requestsResult.error
 
       if (isMountedRef.current) {
+        setHasLoadedDashboard(true)
         setData({
           profile: profileResult.data || {},
           connections: (requestsResult.data || []).map((request) => (
@@ -127,6 +141,19 @@ export default function Dashboard() {
       }
     },
   })
+
+  async function retryDashboard() {
+    setIsLoading(true)
+    setLoadError('')
+
+    try {
+      await loadDashboard()
+    } catch {
+      if (isMountedRef.current) {
+        setLoadError('Không thể tải dữ liệu tổng quan từ Supabase. Hãy thử lại sau.')
+      }
+    }
+  }
 
   const fullName =
     typeof profile.full_name === 'string'
@@ -168,9 +195,9 @@ export default function Dashboard() {
         <header className="dashboard-topbar">
           <div>
             <p className="page-eyebrow">{dateLabel}</p>
-            <h1>Chào {displayName}, cùng bắt đầu một ngày hiệu quả nhé.</h1>
+            <h1>Chào {displayName}. Việc đúng sẽ dễ hơn khi gặp đúng người.</h1>
             <p className="page-description">
-              Tìm người đồng hành cho việc học, dự án và cuộc sống sinh viên.
+              Coco biến một mục tiêu thật thành một kết nối có lý do để bắt đầu.
             </p>
           </div>
         </header>
@@ -181,29 +208,32 @@ export default function Dashboard() {
           </div>
         )}
 
-        {loadError && (
-          <div className="form-error-banner" role="alert">
-            {loadError}
-          </div>
+        {loadError && !isLoading && (
+          <DataRecoveryState
+            title="Chưa tải được tổng quan của cậu"
+            message={hasLoadedDashboard
+              ? `${loadError} Coco vẫn giữ dữ liệu gần nhất để cậu không mất ngữ cảnh.`
+              : `${loadError} Các con số tạm được ẩn để tránh hiển thị trạng thái sai.`}
+            onRetry={retryDashboard}
+            isRetrying={isLoading}
+          />
         )}
 
-        <div className="dashboard-hero-grid">
+        {!isLoading && (!loadError || hasLoadedDashboard) && (
+          <>
+            <div className="dashboard-hero-grid">
           <div className="dashboard-banner">
             <div>
               <span className="banner-tag">
-                {completion === 100 ? 'HỒ SƠ ĐÃ SẴN SÀNG' : 'BƯỚC TIẾP THEO'}
+                COCO CAMPUS
               </span>
 
               <h2>
-                {completion === 100
-                  ? 'Tìm đúng người cho mục tiêu hôm nay.'
-                  : `Hoàn thiện ${completion}% hồ sơ để nhận gợi ý phù hợp hơn.`}
+                Tìm đúng người cho đúng việc — trong cộng đồng sinh viên.
               </h2>
 
               <p>
-                {completion === 100
-                  ? 'Khám phá sinh viên theo mục tiêu, kỹ năng và khu vực của cậu.'
-                  : 'Thêm một vài thông tin cơ bản để CocoApp hiểu điều cậu đang tìm kiếm.'}
+                Không cần đăng bài rồi chờ may mắn. Chọn mục tiêu, xem thông tin phù hợp và chỉ kết nối khi cả hai cùng đồng ý.
               </p>
 
               <Link
@@ -241,11 +271,21 @@ export default function Dashboard() {
               <small>Có thể trò chuyện <Icon name="arrow" /></small>
             </Link>
           </aside>
-        </div>
+            </div>
+
+            <CocoCompass
+              completion={completion}
+              emailConfirmed={Boolean(profile.email_confirmed)}
+              accepted={accepted}
+              pending={pending}
+            />
+          </>
+        )}
 
         <div className="section-heading">
-          <h2>Chọn mục tiêu của cậu</h2>
-          <p>Bắt đầu từ điều cậu muốn giải quyết hôm nay.</p>
+          <p className="section-kicker">BẮT ĐẦU TỪ NHU CẦU THẬT</p>
+          <h2>Cậu muốn tìm người cho việc gì?</h2>
+          <p>Mỗi mục tiêu dùng đúng bộ lọc và ngữ cảnh để bớt những kết nối không liên quan.</p>
         </div>
 
         <div className="quick-action-grid">
@@ -258,14 +298,16 @@ export default function Dashboard() {
               <span className="quick-action-icon" aria-hidden="true">
                 <Icon name={action.icon} />
               </span>
+              <span className="quick-action-eyebrow">{action.eyebrow}</span>
               <h3>{action.title}</h3>
               <p>{action.text}</p>
-              <span className="card-arrow" aria-hidden="true">→</span>
+              <span className="card-arrow" aria-hidden="true"><Icon name="arrow" /></span>
             </Link>
           ))}
         </div>
 
-        <div className="dashboard-lower-grid">
+        {!isLoading && (!loadError || hasLoadedDashboard) && (
+          <div className="dashboard-lower-grid">
           <section className="dashboard-panel">
             <div className="panel-title-row">
               <h2>Kết nối của cậu</h2>
@@ -274,9 +316,16 @@ export default function Dashboard() {
 
             {recentConnections.length === 0 ? (
               <div className="empty-activity">
-                <h3>Chưa có lời mời nào</h3>
-                <p>Tìm hồ sơ phù hợp rồi gửi lời mời kết nối.</p>
-                <Link to="/discover">Khám phá sinh viên →</Link>
+                <div className="empty-connection-art" aria-hidden="true">
+                  <span>C</span>
+                  <i />
+                  <span>{displayName[0]?.toUpperCase() || 'B'}</span>
+                </div>
+                <div>
+                  <h3>Kết nối đầu tiên nên bắt đầu bằng một lý do rõ ràng.</h3>
+                  <p>Chọn mục tiêu, xem hồ sơ và gửi lời mời cho người thật sự phù hợp.</p>
+                  <Link to="/discover">Khám phá có mục tiêu <Icon name="arrow" /></Link>
+                </div>
               </div>
             ) : (
               <div className="connection-preview-list">
@@ -335,9 +384,15 @@ export default function Dashboard() {
               Mức độ hoàn thiện không có nghĩa là tài khoản đã xác minh.
             </p>
 
+            <div className="dashboard-trust-summary" aria-live="polite">
+              <TrustBadge profile={profile} />
+              <small>{getTrustSignal(profile).description}</small>
+            </div>
+
             <Link to="/profile">Chỉnh sửa hồ sơ <Icon name="arrow" /></Link>
           </section>
-        </div>
+          </div>
+        )}
       </section>
     </AppLayout>
   )

@@ -35,6 +35,23 @@ function getAuthProfileName(user) {
   return typeof name === 'string' ? name.trim() : ''
 }
 
+const sidebarPreferenceKey = 'cocoapp:sidebar-collapsed'
+
+function getInitialSidebarState() {
+  if (typeof window === 'undefined') return false
+
+  try {
+    const savedPreference = window.localStorage.getItem(sidebarPreferenceKey)
+
+    if (savedPreference === 'true') return true
+    if (savedPreference === 'false') return false
+  } catch {
+    return false
+  }
+
+  return window.matchMedia('(max-width: 1260px)').matches
+}
+
 export function Icon({ name }) {
   const paths = {
     dashboard: <><path d="M4 13h6V4H4v9Zm10 7h6v-9h-6v9ZM4 20h6v-3H4v3Zm10-13h6V4h-6v3Z"/></>,
@@ -47,6 +64,7 @@ export function Icon({ name }) {
     profile: <><circle cx="12" cy="8" r="3.2"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/></>,
     bell: <><path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></>,
     logout: <><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M14 3h4a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-4"/></>,
+    menu: <><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></>,
     arrow: <><path d="M5 12h13"/><path d="m13 6 6 6-6 6"/></>,
     spark: <><path d="m12 3 1.6 5.4L19 10l-5.4 1.6L12 17l-1.6-5.4L5 10l5.4-1.6L12 3Z"/><path d="m19 16 .7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z"/></>,
   }
@@ -106,12 +124,21 @@ export default function AppLayout({ children }) {
   const [notificationAnnouncement, setNotificationAnnouncement] = useState('')
   const [unreadMessageCount, setUnreadMessageCount] = useState(0)
   const [profileName, setProfileName] = useState('Sinh viên')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(getInitialSidebarState)
   const fullName = profileName.trim() || 'Sinh viên'
   const avatarLetter = fullName.split(/\s+/).pop()?.[0]?.toUpperCase() || 'S'
   const pageTitle = pageTitles[location.pathname] || 'CocoApp'
   const unreadNotificationCount = notifications.filter(
     (notification) => notification.read_at === null
   ).length
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(sidebarPreferenceKey, String(sidebarCollapsed))
+    } catch {
+      return
+    }
+  }, [sidebarCollapsed])
 
   const loadNotifications = useCallback(async ({ silent = false } = {}) => {
     const userId = notificationUserIdRef.current
@@ -439,8 +466,8 @@ export default function AppLayout({ children }) {
   }
 
   return (
-    <div className="app-shell product-shell">
-      <aside className="app-sidebar product-sidebar">
+    <div className={`app-shell product-shell ${sidebarCollapsed ? 'sidebar-is-collapsed' : 'sidebar-is-expanded'}`}>
+      <aside id="primary-sidebar" className="app-sidebar product-sidebar">
         <Link to="/dashboard" className="app-brand product-brand" aria-label="CocoApp">
           <span className="app-brand-icon">C</span>
           <span className="app-brand-name">Coco<span>.</span></span>
@@ -463,6 +490,7 @@ export default function AppLayout({ children }) {
               to={item.to}
               className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
               aria-label={`${item.label}${item.to === '/matches' && unreadMessageCount > 0 ? `, ${unreadMessageCount} tin nhắn chưa đọc` : ''}`}
+              title={sidebarCollapsed ? item.label : undefined}
             >
               <span className="sidebar-icon"><Icon name={item.icon}/></span>
               <span className="sidebar-link-copy">
@@ -498,9 +526,22 @@ export default function AppLayout({ children }) {
 
       <div className="product-main">
         <header className="product-topbar">
-          <div className="topbar-title">
-            <span>COCO COMMUNITY</span>
-            <strong>{pageTitle}</strong>
+          <div className="topbar-leading">
+            <button
+              type="button"
+              className="sidebar-toggle"
+              aria-label={sidebarCollapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'}
+              aria-controls="primary-sidebar"
+              aria-expanded={!sidebarCollapsed}
+              onClick={() => setSidebarCollapsed((current) => !current)}
+            >
+              <Icon name="menu" />
+            </button>
+
+            <div className="topbar-title">
+              <span>COCO COMMUNITY</span>
+              <strong>{pageTitle}</strong>
+            </div>
           </div>
 
           <div className="topbar-actions">

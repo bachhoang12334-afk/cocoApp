@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Component, Fragment, Suspense, lazy, useEffect, useState } from 'react'
 import {
   BrowserRouter,
   Routes,
@@ -6,21 +6,66 @@ import {
   Navigate,
 } from 'react-router-dom'
 
-import Login from './pages/Login'
-import Register from './pages/Register'
-import ForgotPassword from './pages/ForgotPassword'
-import ResetPassword from './pages/ResetPassword'
-import Dashboard from './pages/Dashboard'
-import Profile from './pages/Profile'
-import Discover from './pages/Discover'
-import Matches from './pages/Matches'
-import SafetyCenter from './pages/SafetyCenter'
 import {
   getCurrentAccount,
   subscribeToAuthState,
 } from './auth'
 import './App.css'
 import './ProductV2.css'
+
+const Login = lazy(() => import('./pages/Login'))
+const Register = lazy(() => import('./pages/Register'))
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Profile = lazy(() => import('./pages/Profile'))
+const Discover = lazy(() => import('./pages/Discover'))
+const Matches = lazy(() => import('./pages/Matches'))
+const SafetyCenter = lazy(() => import('./pages/SafetyCenter'))
+
+function RouteLoadingState() {
+  return (
+    <main className="route-loading-page" role="status" aria-live="polite" aria-busy="true">
+      <div className="route-loading-card">
+        <span className="route-loading-mark" aria-hidden="true">C</span>
+        <div>
+          <strong>Đang mở không gian Coco…</strong>
+          <span>Chuẩn bị đúng nội dung cho cậu.</span>
+        </div>
+        <i className="route-loading-progress" aria-hidden="true" />
+      </div>
+    </main>
+  )
+}
+
+class RouteErrorBoundary extends Component {
+  state = { hasError: false }
+
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <main className="route-loading-page">
+          <section className="route-loading-card route-loading-error" role="alert">
+            <span className="route-loading-mark" aria-hidden="true">C</span>
+            <div>
+              <strong>Trang này chưa tải được.</strong>
+              <span>Kết nối có thể vừa gián đoạn hoặc Coco vừa được cập nhật.</span>
+            </div>
+            <button type="button" onClick={() => window.location.reload()}>
+              Tải lại Coco
+            </button>
+          </section>
+        </main>
+      )
+    }
+
+    return this.props.children
+  }
+}
 
 function RequireLogin({ children, account, isCheckingSession }) {
   if (isCheckingSession) return null
@@ -86,7 +131,9 @@ export default function App() {
         </div>
       )}
 
-      <Routes>
+      <RouteErrorBoundary>
+        <Suspense fallback={<RouteLoadingState />}>
+          <Routes>
         <Route
           path="/"
           element={<Navigate to="/dashboard" replace />}
@@ -141,7 +188,9 @@ export default function App() {
           path="*"
           element={<Navigate to="/dashboard" replace />}
         />
-      </Routes>
+          </Routes>
+        </Suspense>
+      </RouteErrorBoundary>
     </BrowserRouter>
   )
 }

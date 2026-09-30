@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AppLayout, { Icon } from '../components/AppLayout'
 import { getCurrentAccount } from '../auth'
@@ -6,6 +6,15 @@ import { supabase } from '../lib/supabaseClient'
 import { VIETNAM_LOCATIONS } from '../data/vietnamLocations'
 import { useConnectionRequestRefresh } from '../hooks/useConnectionRequestRefresh'
 import SafetyActions from '../components/SafetyActions'
+import TrustBadge from '../components/TrustBadge'
+import { getTrustSignal } from '../lib/trustSignals'
+import { getMatchSignals, sortStudentsByMatch } from '../lib/matchSignals'
+import ConnectionInviteDialog from '../components/ConnectionInviteDialog'
+import {
+  getConnectionInviteError,
+  normalizeConnectionInvite,
+} from '../lib/connectionInvite'
+import DataRecoveryState from '../components/DataRecoveryState'
 
 const purposes = ['Tất cả', 'Học nhóm', 'Team Project', 'Ghép trọ']
 const purposeValues = {
@@ -68,12 +77,17 @@ function mapProfileToStudent(profile) {
     distance: null,
     skills: profile.major?.trim() ? [major] : [],
     about: profile.bio?.trim() || 'Chưa có giới thiệu.',
+    email_confirmed: profile.email_confirmed === true,
+    education_email: profile.education_email === true,
+    verification_status: profile.verification_status || 'unverified',
   }
 }
 
 function mapProfilePreferences(profile) {
   return {
     gender: profile?.gender?.trim() || '',
+    major: profile?.major?.trim() || '',
+    purpose: profile?.purpose?.trim() || '',
     city: profile?.city?.trim() || '',
     area: profile?.area?.trim() || '',
     maxDistance: ['1', '3', '5', '10'].includes(String(profile?.max_distance_km))
@@ -109,12 +123,18 @@ function getRequestErrorMessage(error) {
     return 'Không thể kết nối với tài khoản này do cài đặt an toàn.'
   }
 
+  if (message.includes('connection request intro')) {
+    return 'Lời nhắn cần có từ 8 đến 240 ký tự và không thể để trống.'
+  }
+
   return 'Chưa gửi được lời mời. Hãy thử lại sau.'
 }
 
 export default function Discover({ initialPurpose = 'Tất cả' }) {
   const [profile, setProfile] = useState({
     gender: '',
+    major: '',
+    purpose: '',
     city: '',
     area: '',
     maxDistance: '5',
@@ -124,20 +144,26 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
   const [loadError, setLoadError] = useState('')
 
   const [search, setSearch] = useState('')
+  const deferredSearch = useDeferredValue(search)
   const [purpose, setPurpose] = useState(initialPurpose)
   const [city, setCity] = useState(profile.city || '')
   const [area, setArea] = useState(profile.area || '')
   const [maxDistance, setMaxDistance] = useState('5')
+  const [sortMode, setSortMode] = useState('fit')
   const [selectedId, setSelectedId] = useState(null)
   const [isFiltersOpen, setIsFiltersOpen] = useState(false)
   const [undoStudent, setUndoStudent] = useState(null)
-  const [requestError, setRequestError] = useState('')
+  const [requestNotice, setRequestNotice] = useState('')
   const [safetyStatus, setSafetyStatus] = useState('')
+  const [inviteStudent, setInviteStudent] = useState(null)
+  const [inviteMessage, setInviteMessage] = useState('')
+  const [inviteError, setInviteError] = useState('')
   const [requestStatuses, setRequestStatuses] = useState({})
   const [sendingIds, setSendingIds] = useState({})
   const [hiddenIds, setHiddenIds] = useState([])
   const dialogRef = useRef(null)
   const lastProfileTriggerRef = useRef(null)
+  const inviteTriggerRef = useRef(null)
   const isMountedRef = useRef(false)
   const refreshPromiseRef = useRef(null)
   const hasLoadedProfilesRef = useRef(false)
@@ -162,7 +188,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
         const [ownResult, othersResult, requestResult] = await Promise.all([
           supabase
             .from('profiles')
-            .select('gender, city, area, max_distance_km')
+            .select('gender, major, purpose, city, area, max_distance_km')
             .eq('id', user.id)
             .maybeSingle(),
           supabase.rpc('get_discover_profiles'),
@@ -223,6 +249,14 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
     resetPreferences: !hasLoadedProfilesRef.current,
   }))
 
+  async function retryDiscoverProfiles() {
+    setIsLoading(true)
+    setLoadError('')
+    await loadDiscoverProfiles({
+      resetPreferences: !hasLoadedProfilesRef.current,
+    })
+  }
+
   const canFilterRoommates = ['Nam', 'Nữ', 'Khác'].includes(profile.gender)
 
   const cities = uniqueLocations([
@@ -255,7 +289,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
       (canFilterRoommates && student.gender === profile.gender)
 
     return (
-      searchableText.includes(normalize(search)) &&
+      searchableText.includes(normalize(deferredSearch)) &&
       (purpose === 'Tất cả' || student.purpose === purpose) &&
       (!city || normalize(student.city) === normalize(city)) &&
       (!area || normalize(student.area) === normalize(area)) &&
@@ -265,7 +299,23 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
     )
   })
 
-  const selectedStudent = filteredStudents.find(
+  const fitPreferences = {
+    major: profile.major,
+    purpose: purpose === 'Tất cả' ? profile.purpose : purpose,
+    city: city || profile.city,
+    area: area || (!city || normalize(city) === normalize(profile.city)
+      ? profile.area
+      : ''),
+  }
+
+  const rankedStudents = sortMode === 'fit'
+    ? sortStudentsByMatch(filteredStudents, fitPreferences)
+    : filteredStudents.map((student) => ({
+        ...student,
+        fit: getMatchSignals(fitPreferences, student),
+      }))
+
+  const selectedStudent = rankedStudents.find(
     (student) => student.id === selectedId
   )
 
@@ -304,9 +354,47 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
     closeProfile(false)
   }
 
-  async function sendRequest(id) {
-    const student = filteredStudents.find((item) => item.id === id)
+  function openInvite(student) {
+    const currentStatus = requestStatuses[requestKey(student.profileId)]
+    if (currentStatus === 'pending' || currentStatus === 'accepted') return
+
+    inviteTriggerRef.current = selectedStudent
+      ? lastProfileTriggerRef.current
+      : document.activeElement
+    if (selectedStudent) closeProfile(false)
+    setInviteStudent(student)
+    setInviteMessage('')
+    setInviteError('')
+    setRequestNotice('')
+  }
+
+  const closeInvite = useCallback((restoreFocus = true) => {
+    setInviteStudent(null)
+    setInviteMessage('')
+    setInviteError('')
+
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => {
+        inviteTriggerRef.current?.focus({ preventScroll: true })
+      })
+    }
+  }, [])
+
+  function updateInviteMessage(value) {
+    setInviteMessage(value)
+    if (inviteError) setInviteError('')
+  }
+
+  async function sendInvite(event) {
+    event.preventDefault()
+    const student = inviteStudent
     if (!student || !purposeValues[student.purpose]) return
+
+    const messageError = getConnectionInviteError(inviteMessage)
+    if (messageError) {
+      setInviteError(messageError)
+      return
+    }
 
     const key = requestKey(student.profileId)
     const status = requestStatuses[key]
@@ -314,7 +402,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
     if (status === 'pending' || status === 'accepted' || sendingIds[key]) return
 
     setSendingIds((current) => ({ ...current, [key]: true }))
-    setRequestError('')
+    setRequestNotice('')
 
     try {
       const user = await getCurrentAccount()
@@ -327,13 +415,16 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
           recipient_id: student.profileId,
           purpose: purposeValues[student.purpose],
           status: 'pending',
+          intro_message: normalizeConnectionInvite(inviteMessage),
         })
 
       if (error) throw error
 
       setRequestStatuses((current) => ({ ...current, [key]: 'pending' }))
+      setRequestNotice(`Đã gửi lời mời có lời nhắn tới ${student.name}.`)
+      closeInvite()
     } catch (error) {
-      setRequestError(getRequestErrorMessage(error))
+      setInviteError(getRequestErrorMessage(error))
     } finally {
       setSendingIds((current) => {
         const next = { ...current }
@@ -397,15 +488,20 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
           </div>
         )}
 
-        {loadError && (
-          <div className="form-error-banner" role="alert" aria-live="assertive">
-            {loadError}
-          </div>
+        {loadError && !isLoading && (
+          <DataRecoveryState
+            title="Chưa làm mới được danh sách khám phá"
+            message={hasLoadedProfilesRef.current
+              ? `${loadError} Coco vẫn giữ kết quả gần nhất để cậu không mất ngữ cảnh.`
+              : loadError}
+            onRetry={retryDiscoverProfiles}
+            isRetrying={isLoading}
+          />
         )}
 
-        {requestError && (
-          <div className="form-error-banner" role="alert" aria-live="assertive">
-            {requestError}
+        {requestNotice && (
+          <div className="matches-status-message" role="status" aria-live="polite">
+            <Icon name="connection" /> {requestNotice}
           </div>
         )}
 
@@ -415,7 +511,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
           </div>
         )}
 
-        <div className="discover-layout">
+        {(!loadError || hasLoadedProfilesRef.current) && <div className="discover-layout">
           <button
             type="button"
             className="discover-filter-toggle"
@@ -526,10 +622,28 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
             <div className="discover-results-toolbar">
               <div>
                 <strong>{filteredStudents.length} kết quả phù hợp</strong>
-                <span>Ưu tiên theo mục tiêu và khu vực cậu chọn</span>
+                <span>Coco Fit giải thích từng điểm chung, không chấm điểm con người</span>
               </div>
-              <button type="button" onClick={resetFilters}>Đặt lại bộ lọc</button>
+              <div className="discover-toolbar-actions">
+                <label className="discover-sort-field">
+                  <span>Sắp xếp</span>
+                  <select value={sortMode} onChange={(event) => setSortMode(event.target.value)}>
+                    <option value="fit">Coco Fit</option>
+                    <option value="newest">Hồ sơ mới</option>
+                  </select>
+                </label>
+                <button type="button" onClick={resetFilters}>Đặt lại bộ lọc</button>
+              </div>
             </div>
+
+            <section className="coco-fit-explainer" aria-labelledby="coco-fit-title">
+              <span className="coco-fit-explainer-icon" aria-hidden="true"><Icon name="spark" /></span>
+              <div>
+                <h2 id="coco-fit-title">Biết lý do trước khi gửi lời mời.</h2>
+                <p>Coco chỉ so sánh mục tiêu, ngành và khu vực công khai. Kết quả là gợi ý để cậu tự đánh giá, không phải bảo đảm tương hợp hay an toàn.</p>
+              </div>
+              <Link to="/profile">Cập nhật tiêu chí <Icon name="arrow" /></Link>
+            </section>
 
             <div className="purpose-tabs" aria-label="Mục tiêu kết nối">
               {purposes.map((item) => (
@@ -549,7 +663,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
             </div>
 
             <div className="student-card-grid">
-              {filteredStudents.map((student) => {
+              {rankedStudents.map((student) => {
                 const studentRequestKey = requestKey(
                   student.profileId
                 )
@@ -578,12 +692,22 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
                     <div className="student-main-info">
                       <h2>{student.name}</h2>
                       <p>{student.major}</p>
+                      <TrustBadge profile={student} compact />
                     </div>
 
                     <div className="student-skill-list">
                       {student.skills.map((skill) => (
                         <span key={skill}>{skill}</span>
                       ))}
+                    </div>
+
+                    <div className={`coco-fit-summary ${student.fit.level}`}>
+                      <span className="coco-fit-label"><Icon name="spark" /> {student.fit.label}</span>
+                      <ul aria-label={`Lý do gợi ý ${student.name}`}>
+                        {student.fit.reasons.slice(0, 2).map((reason) => (
+                          <li key={reason}>{reason}</li>
+                        ))}
+                      </ul>
                     </div>
 
                     <p className="student-location">
@@ -609,7 +733,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
                         type="button"
                         className="connect-student-button"
                         disabled={requestPending || requestAccepted || sendingIds[studentRequestKey]}
-                        onClick={() => sendRequest(student.id)}
+                        onClick={() => openInvite(student)}
                       >
                         {requestAccepted
                           ? 'Đã kết nối'
@@ -633,7 +757,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
               })}
             </div>
 
-            {!isLoading && filteredStudents.length === 0 && (
+            {!isLoading && !loadError && filteredStudents.length === 0 && (
               <div className="discover-empty-state">
                 <div className="discover-empty-icon" aria-hidden="true"><Icon name="discover" /></div>
                 <h2>{students.length === 0 ? 'Chưa có người dùng khác' : 'Chưa có kết quả phù hợp'}</h2>
@@ -663,7 +787,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
               </div>
             )}
           </div>
-        </div>
+        </div>}
 
         {selectedStudent && (
           <div className="discover-dialog-backdrop" role="presentation" onMouseDown={(event) => {
@@ -685,6 +809,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
                   <p className="discover-dialog-kicker">HỒ SƠ SINH VIÊN</p>
                   <h2 id="discover-dialog-title">{selectedStudent.name}</h2>
                   <p>{selectedStudent.purpose} · {selectedStudent.major}</p>
+                  <TrustBadge profile={selectedStudent} compact />
                 </div>
                 <button type="button" className="discover-dialog-close" onClick={closeProfile}>
                   Đóng
@@ -695,6 +820,21 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
                 <div className="discover-dialog-section">
                   <span>Giới thiệu</span>
                   <p>{selectedStudent.about}</p>
+                </div>
+                <div className="discover-dialog-section">
+                  <span>Lý do Coco Fit</span>
+                  <div className={`coco-fit-summary dialog ${selectedStudent.fit.level}`}>
+                    <span className="coco-fit-label"><Icon name="spark" /> {selectedStudent.fit.label}</span>
+                    <ul>
+                      {selectedStudent.fit.reasons.map((reason) => <li key={reason}>{reason}</li>)}
+                    </ul>
+                  </div>
+                  <small>Gợi ý dựa trên thông tin công khai, không phải điểm tương hợp hay xác minh an toàn.</small>
+                </div>
+                <div className="discover-dialog-section">
+                  <span>Tín hiệu Coco Trust</span>
+                  <TrustBadge profile={selectedStudent} />
+                  <small>{getTrustSignal(selectedStudent).description}</small>
                 </div>
                 <div className="discover-dialog-section">
                   <span>Khu vực gần đúng</span>
@@ -727,7 +867,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
                       selectedStudent.profileId
                     )]
                   }
-                  onClick={() => sendRequest(selectedStudent.id)}
+                  onClick={() => openInvite(selectedStudent)}
                 >
                   {requestStatuses[requestKey(
                     selectedStudent.profileId
@@ -746,6 +886,23 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
               </footer>
             </section>
           </div>
+        )}
+
+        {inviteStudent && (
+          <ConnectionInviteDialog
+            student={inviteStudent}
+            message={inviteMessage}
+            error={inviteError}
+            isSending={Boolean(sendingIds[requestKey(inviteStudent.profileId)])}
+            onChange={updateInviteMessage}
+            onBlur={() => {
+              if (inviteMessage.trim()) {
+                setInviteError(getConnectionInviteError(inviteMessage))
+              }
+            }}
+            onClose={closeInvite}
+            onSubmit={sendInvite}
+          />
         )}
       </section>
     </AppLayout>
