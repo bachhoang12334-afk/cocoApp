@@ -34,6 +34,11 @@ Chạy migrations theo đúng thứ tự trong `supabase/migrations`:
 5. `20260917000004_create_messages.sql`
 6. `20260917000005_add_message_read_status.sql`
 7. `20260917000006_sync_profile_registration_metadata.sql`
+8. `20260917000007_create_safety_tools.sql`
+9. `20260917000008_add_profile_trust_signals.sql`
+10. `20260917000009_add_connection_request_intros.sql`
+11. `20260917000010_add_matching_preferences.sql`
+12. `20260917000011_harden_profile_access.sql`
 
 Không chỉnh sửa migration đã chạy. Mọi thay đổi schema tiếp theo phải nằm trong migration mới.
 

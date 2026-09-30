@@ -38,6 +38,10 @@ const matchingPreferencesMigration = await readFile(
   new URL('../supabase/migrations/20260917000010_add_matching_preferences.sql', import.meta.url),
   'utf8'
 )
+const profileAccessMigration = await readFile(
+  new URL('../supabase/migrations/20260917000011_harden_profile_access.sql', import.meta.url),
+  'utf8'
+)
 const discoverTrustFunction = trustMigration.match(
   /create function public\.get_discover_profiles\(\)[\s\S]*?\$\$;/
 )?.[0] || ''
@@ -149,4 +153,49 @@ test('matching preferences stay broad, validated, and separate from private prof
   assert.match(discoverPreferencesFunction, /profile\.commitment_level/)
   assert.doesNotMatch(discoverPreferencesFunction, /profile_private|exact_address|phone/i)
   assert.match(matchingPreferencesMigration, /grant execute on function public\.get_discover_profiles\(\) to authenticated/)
+})
+
+test('direct profile reads are restricted to the authenticated user', () => {
+  assert.match(
+    profileAccessMigration,
+    /drop policy if exists "Authenticated users can view public profiles"/
+  )
+  assert.match(
+    profileAccessMigration,
+    /create policy "Users can view their own profile"[\s\S]*using \(\(select auth\.uid\(\)\) = id\)/
+  )
+  assert.match(
+    profileAccessMigration,
+    /create policy "Profiles remain self-only"[\s\S]*as restrictive[\s\S]*using \(\(select auth\.uid\(\)\) = id\)/
+  )
+  assert.match(profileAccessMigration, /revoke all on table public\.profiles from anon/)
+  assert.doesNotMatch(profileAccessMigration, /using \(true\)/i)
+})
+
+test('connection profile reads require an active participant relationship and no block', () => {
+  const connectionFunction = profileAccessMigration.match(
+    /create or replace function public\.get_my_connection_requests\(\)[\s\S]*?\$\$;/
+  )?.[0] || ''
+
+  assert.match(connectionFunction, /security definer/)
+  assert.match(connectionFunction, /set search_path = ''/)
+  assert.match(connectionFunction, /auth\.uid\(\) in \(request\.requester_id, request\.recipient_id\)/)
+  assert.match(connectionFunction, /request\.status in \('pending', 'accepted'\)/)
+  assert.match(connectionFunction, /block\.blocker_id = other_profile\.id and block\.blocked_id = auth\.uid\(\)/)
+  assert.doesNotMatch(connectionFunction, /profile_private|university|study_year|exact_address|phone/i)
+  assert.match(profileAccessMigration, /revoke all on function public\.get_my_connection_requests\(\) from public, anon, authenticated/)
+  assert.match(profileAccessMigration, /grant execute on function public\.get_my_connection_requests\(\) to authenticated/)
+})
+
+test('notification actor names are recipient-scoped and hidden after either user blocks', () => {
+  const notificationFunction = profileAccessMigration.match(
+    /create or replace function public\.get_my_notifications\(\)[\s\S]*?\$\$;/
+  )?.[0] || ''
+
+  assert.match(notificationFunction, /security definer/)
+  assert.match(notificationFunction, /notification\.recipient_id = auth\.uid\(\)/)
+  assert.match(notificationFunction, /left join public\.profiles as actor/)
+  assert.match(notificationFunction, /block\.blocker_id = actor\.id and block\.blocked_id = auth\.uid\(\)/)
+  assert.doesNotMatch(notificationFunction, /profile_private|university|study_year|exact_address|phone/i)
+  assert.match(profileAccessMigration, /grant execute on function public\.get_my_notifications\(\) to authenticated/)
 })

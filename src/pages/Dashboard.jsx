@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabaseClient'
 import TrustBadge from '../components/TrustBadge'
 import CocoCompass from '../components/CocoCompass'
 import DataRecoveryState from '../components/DataRecoveryState'
+import { normalizeConnectionRequests } from '../lib/profileAccess'
 import { getTrustSignal } from '../lib/trustSignals'
 
 const profileFields = [
@@ -35,8 +36,6 @@ const dashboardProfileSelect = [
   'education_email',
   'verification_status',
 ].join(', ')
-const dashboardRequestSelect = 'id, requester_id, recipient_id, purpose, status, created_at, requester:profiles!connection_requests_requester_id_fkey(full_name), recipient:profiles!connection_requests_recipient_id_fkey(full_name)'
-
 const quickActions = [
   {
     to: '/study',
@@ -108,12 +107,7 @@ export default function Dashboard() {
           .select(dashboardProfileSelect)
           .eq('id', user.id)
           .maybeSingle(),
-        supabase
-          .from('connection_requests')
-          .select(dashboardRequestSelect)
-          .or(`requester_id.eq.${user.id},recipient_id.eq.${user.id}`)
-          .in('status', ['pending', 'accepted'])
-          .order('created_at', { ascending: false }),
+        supabase.rpc('get_my_connection_requests'),
       ])
 
       if (profileResult.error) throw profileResult.error
@@ -123,7 +117,7 @@ export default function Dashboard() {
         setHasLoadedDashboard(true)
         setData({
           profile: profileResult.data || {},
-          connections: (requestsResult.data || []).map((request) => (
+          connections: normalizeConnectionRequests(requestsResult.data).map((request) => (
             mapDashboardConnection(request, user.id)
           )),
         })

@@ -2,9 +2,8 @@ import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getCurrentAccount, logoutAccount } from '../auth'
 import { useConnectionRequestRefresh } from '../hooks/useConnectionRequestRefresh'
+import { normalizeNotifications } from '../lib/profileAccess'
 import { supabase } from '../lib/supabaseClient'
-
-const notificationSelect = 'id, recipient_id, actor_id, connection_request_id, type, read_at, created_at, actor:profiles!notifications_actor_id_fkey(full_name)'
 
 const notificationCopy = {
   request_received: 'đã gửi cho cậu một lời mời kết nối.',
@@ -149,18 +148,14 @@ export default function AppLayout({ children }) {
     }
 
     const { data, error } = await supabase
-      .from('notifications')
-      .select(notificationSelect)
-      .eq('recipient_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(30)
+      .rpc('get_my_notifications')
 
     if (!notificationsMountedRef.current) return
 
     if (error) {
       setNotificationsError('Chưa tải được thông báo. Hãy thử mở lại chuông.')
     } else {
-      setNotifications(data || [])
+      setNotifications(normalizeNotifications(data))
       setNotificationsError('')
     }
 
@@ -365,8 +360,8 @@ export default function AppLayout({ children }) {
   useEffect(() => {
     if (!notificationsOpen) return undefined
 
-    void loadNotifications({ silent: true })
-    window.requestAnimationFrame(() => {
+    const refreshFrame = window.requestAnimationFrame(() => {
+      void loadNotifications({ silent: true })
       notificationPanelRef.current?.querySelector('button:not(:disabled)')?.focus({ preventScroll: true })
     })
 
@@ -387,6 +382,7 @@ export default function AppLayout({ children }) {
     document.addEventListener('keydown', handleKeyDown)
 
     return () => {
+      window.cancelAnimationFrame(refreshFrame)
       document.removeEventListener('mousedown', handlePointerDown)
       document.removeEventListener('keydown', handleKeyDown)
     }

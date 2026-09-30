@@ -11,6 +11,7 @@ import {
   MESSAGE_PAGE_SIZE,
   normalizeMessagePage,
 } from '../lib/messageState'
+import { normalizeConnectionRequests } from '../lib/profileAccess'
 import { supabase } from '../lib/supabaseClient'
 import SafetyActions from '../components/SafetyActions'
 import TrustBadge from '../components/TrustBadge'
@@ -50,9 +51,6 @@ function mapRequest(request, userId, messagePagesByRequest) {
     unreadCount: messagePage?.unreadCount || 0,
   }
 }
-
-const profileFields = 'id, full_name, major, purpose, city, area, public_location, bio, email_confirmed, education_email, verification_status'
-const requestSelect = `id, requester_id, recipient_id, purpose, intro_message, status, created_at, responded_at, requester:profiles!connection_requests_requester_id_fkey (${profileFields}), recipient:profiles!connection_requests_recipient_id_fkey (${profileFields})`
 
 function getMatchesErrorMessage(error) {
   if (error?.message?.toLowerCase().includes('row-level security')) {
@@ -151,13 +149,12 @@ async function fetchConnections() {
   const user = await getCurrentAccount()
   if (!user) throw new Error('Phiên đăng nhập đã hết.')
 
-  const { data: requests, error } = await supabase
-    .from('connection_requests')
-    .select(requestSelect)
-    .or(`requester_id.eq.${user.id},recipient_id.eq.${user.id}`)
-    .order('created_at', { ascending: false })
+  const { data: requestRows, error } = await supabase
+    .rpc('get_my_connection_requests')
 
   if (error) throw error
+
+  const requests = normalizeConnectionRequests(requestRows)
 
   const acceptedRequestIds = (requests || [])
     .filter((request) => request.status === 'accepted')
