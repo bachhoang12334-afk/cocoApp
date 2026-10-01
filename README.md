@@ -9,6 +9,7 @@ CocoApp là nền tảng kết nối sinh viên theo nhu cầu thực tế: họ
 - Gửi, chấp nhận, từ chối, hủy và ngắt kết nối.
 - Thông báo Realtime với trạng thái đã đọc.
 - Tin nhắn Realtime, lịch sử, phân trang và số tin chưa đọc.
+- Coco Plan giúp hai kết nối đề xuất, thống nhất và hoàn thành một bước tiếp theo.
 - Khôi phục mật khẩu và gửi lại email xác nhận.
 - Giao diện responsive và hỗ trợ thao tác bàn phím.
 
@@ -39,6 +40,8 @@ Chạy migrations theo đúng thứ tự trong `supabase/migrations`:
 10. `20260917000009_add_connection_request_intros.sql`
 11. `20260917000010_add_matching_preferences.sql`
 12. `20260917000011_harden_profile_access.sql`
+13. `20260917000012_create_connection_plans.sql`
+14. `20260917000013_harden_connection_plan_transitions.sql`
 
 Không chỉnh sửa migration đã chạy. Mọi thay đổi schema tiếp theo phải nằm trong migration mới.
 

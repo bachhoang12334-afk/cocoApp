@@ -5013,6 +5013,469 @@ textarea:focus-visible {
   }
 }
 
+/* Coco Plan: a safe, concrete next step inside an accepted conversation. */
+.messenger-workspace > .chat-panel {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
+.coco-plan-panel {
+  padding: 14px 22px 16px;
+  border-bottom: 1px solid var(--coco-line);
+  background: linear-gradient(135deg, #f3fbfa 0%, #fffaf6 100%);
+}
+
+.coco-plan-panel-heading,
+.coco-plan-empty,
+.coco-plan-restart,
+.coco-plan-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.coco-plan-panel-heading > div,
+.coco-plan-card-copy {
+  min-width: 0;
+}
+
+.coco-plan-panel-heading p,
+.coco-plan-dialog-header p {
+  margin: 0 0 3px;
+  color: var(--coco-primary-dark);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .13em;
+}
+
+.coco-plan-panel-heading h3 {
+  margin: 0;
+  color: var(--coco-ink);
+  font-size: 16px;
+  font-weight: 850;
+}
+
+.coco-plan-status {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  color: #705320;
+  border: 1px solid #ead7a6;
+  border-radius: 999px;
+  background: #fff8df;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.coco-plan-status.is-accepted,
+.coco-plan-status.is-completed {
+  color: #176052;
+  border-color: #b9ded4;
+  background: #eaf8f3;
+}
+
+.coco-plan-status.is-declined,
+.coco-plan-status.is-cancelled,
+.coco-plan-status.is-expired {
+  color: #6b7280;
+  border-color: #d9dde4;
+  background: #f5f6f8;
+}
+
+.coco-plan-empty {
+  margin-top: 10px;
+}
+
+.coco-plan-empty p {
+  margin: 0;
+  color: var(--coco-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.coco-plan-primary,
+.coco-plan-secondary {
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 820;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.coco-plan-primary {
+  color: #fff;
+  border: 1px solid var(--coco-primary);
+  background: var(--coco-primary);
+}
+
+.coco-plan-secondary {
+  color: var(--coco-primary-dark);
+  border: 1px solid #b8d9dc;
+  background: #fff;
+}
+
+.coco-plan-primary:hover:not(:disabled) {
+  background: var(--coco-primary-dark);
+}
+
+.coco-plan-secondary:hover:not(:disabled) {
+  background: var(--coco-primary-soft);
+}
+
+.coco-plan-primary:disabled,
+.coco-plan-secondary:disabled {
+  cursor: wait;
+  opacity: .6;
+}
+
+.coco-plan-primary:focus-visible,
+.coco-plan-secondary:focus-visible,
+.coco-plan-dialog button:focus-visible,
+.coco-plan-dialog input:focus-visible,
+.coco-plan-dialog select:focus-visible,
+.coco-plan-dialog textarea:focus-visible {
+  outline: 3px solid rgba(28, 126, 137, .22);
+  outline-offset: 3px;
+}
+
+.coco-plan-card {
+  margin-top: 10px;
+  padding: 13px;
+  border: 1px solid rgba(28, 126, 137, .17);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .86);
+}
+
+.coco-plan-card-copy > span {
+  color: var(--coco-muted);
+  font-size: 10px;
+  font-weight: 720;
+}
+
+.coco-plan-card-copy h4 {
+  margin: 3px 0 0;
+  overflow: hidden;
+  color: var(--coco-ink);
+  font-size: 14px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coco-plan-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+  margin: 12px 0 0;
+}
+
+.coco-plan-meta div {
+  min-width: 0;
+}
+
+.coco-plan-meta .coco-plan-meta-wide {
+  grid-column: 1 / -1;
+}
+
+.coco-plan-expiry-note {
+  margin: 12px 0 0;
+  padding: 9px 11px;
+  color: #705320;
+  border: 1px solid #ead7a6;
+  border-radius: 8px;
+  background: #fff8df;
+  font-size: 11px;
+  font-weight: 720;
+  line-height: 1.5;
+}
+
+.coco-plan-meta dt {
+  color: var(--coco-muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.coco-plan-meta dd {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--coco-ink);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.coco-plan-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.coco-plan-restart {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--coco-line);
+}
+
+.coco-plan-restart span {
+  color: var(--coco-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.coco-plan-backdrop {
+  position: fixed;
+  z-index: 180;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(14, 29, 37, .58);
+  backdrop-filter: blur(5px);
+}
+
+.coco-plan-dialog {
+  width: min(640px, 100%);
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, .72);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 28px 80px rgba(9, 36, 42, .25);
+}
+
+.coco-plan-dialog-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--coco-line);
+  background: linear-gradient(135deg, #eef9f7, #fff8ef);
+}
+
+.coco-plan-mark {
+  display: grid;
+  width: 43px;
+  height: 43px;
+  place-items: center;
+  color: #fff;
+  border-radius: 12px;
+  background: var(--coco-primary);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.coco-plan-dialog-header h2 {
+  margin: 0;
+  color: var(--coco-ink);
+  font-size: 19px;
+  font-weight: 880;
+}
+
+.coco-plan-dialog-header span {
+  display: block;
+  margin-top: 4px;
+  color: var(--coco-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.coco-plan-dialog-header > button {
+  min-width: 52px;
+  min-height: 40px;
+  padding: 0 10px;
+  color: var(--coco-muted);
+  border: 1px solid var(--coco-line);
+  border-radius: 9px;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.coco-plan-form {
+  padding: 20px 22px 22px;
+}
+
+.coco-plan-privacy-note {
+  display: flex;
+  gap: 7px;
+  padding: 10px 12px;
+  color: #2f6259;
+  border: 1px solid #cce5df;
+  border-radius: 9px;
+  background: #f1faf7;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.coco-plan-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 15px;
+  margin-top: 17px;
+}
+
+.coco-plan-field {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+}
+
+.coco-plan-field-wide {
+  grid-column: 1 / -1;
+}
+
+.coco-plan-field > span {
+  color: var(--coco-ink);
+  font-size: 11px;
+  font-weight: 820;
+}
+
+.coco-plan-field > span i {
+  color: var(--coco-muted);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.coco-plan-field input,
+.coco-plan-field select,
+.coco-plan-field textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  color: var(--coco-ink);
+  border: 1px solid #ccd9dd;
+  border-radius: 9px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+}
+
+.coco-plan-field textarea {
+  min-height: 76px;
+  resize: vertical;
+}
+
+.coco-plan-field [aria-invalid='true'] {
+  border-color: #d36464;
+}
+
+.coco-plan-field small {
+  color: var(--coco-muted);
+  font-size: 9px;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.coco-plan-field em,
+.coco-plan-form-error {
+  margin: 0;
+  color: #a33b3b;
+  font-size: 10px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.coco-plan-form-error {
+  margin-top: 14px;
+  padding: 9px 11px;
+  border: 1px solid #efcccc;
+  border-radius: 8px;
+  background: #fff5f5;
+}
+
+.coco-plan-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--coco-line);
+}
+
+.coco-plan-dialog-actions button {
+  min-height: 44px;
+}
+
+@media (max-width: 620px) {
+  .messenger-workspace > .chat-panel {
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+  }
+
+  .coco-plan-panel {
+    padding: 12px 14px 14px;
+  }
+
+  .coco-plan-empty,
+  .coco-plan-restart {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .coco-plan-empty .coco-plan-primary,
+  .coco-plan-restart .coco-plan-primary {
+    width: 100%;
+  }
+
+  .coco-plan-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .coco-plan-meta .coco-plan-meta-wide {
+    grid-column: auto;
+  }
+
+  .coco-plan-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .coco-plan-dialog {
+    width: 100%;
+    max-height: 94dvh;
+    border-radius: 18px 18px 0 0;
+  }
+
+  .coco-plan-dialog-header {
+    padding: 17px 16px;
+  }
+
+  .coco-plan-mark {
+    width: 38px;
+    height: 38px;
+  }
+
+  .coco-plan-dialog-header h2 {
+    font-size: 17px;
+  }
+
+  .coco-plan-form {
+    padding: 17px 16px calc(18px + env(safe-area-inset-bottom));
+  }
+
+  .coco-plan-privacy-note {
+    flex-direction: column;
+  }
+
+  .coco-plan-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .coco-plan-field-wide {
+    grid-column: auto;
+  }
+
+  .coco-plan-dialog-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 /* Collapsible desktop navigation */
 .app-shell .product-sidebar,
 .app-shell .product-main {

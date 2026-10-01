@@ -16,6 +16,16 @@ import { supabase } from '../lib/supabaseClient'
 import SafetyActions from '../components/SafetyActions'
 import TrustBadge from '../components/TrustBadge'
 import DataRecoveryState from '../components/DataRecoveryState'
+import CocoPlanCard from '../components/CocoPlanCard'
+import CocoPlanDialog from '../components/CocoPlanDialog'
+import {
+  buildCocoPlanInsert,
+  EMPTY_COCO_PLAN_DRAFT,
+  getCocoPlanDraftErrors,
+  getDefaultCocoPlanStartAt,
+  mapCocoPlan,
+  mergeCocoPlans,
+} from '../lib/cocoPlan'
 
 const purposeLabels = {
   study_group: 'Học nhóm',
@@ -23,7 +33,7 @@ const purposeLabels = {
   roommates: 'Ghép trọ',
 }
 
-function mapRequest(request, userId, messagePagesByRequest) {
+function mapRequest(request, userId, messagePagesByRequest, plansByRequest) {
   const isIncoming = request.recipient_id === userId
   const otherProfile = isIncoming ? request.requester : request.recipient
   const messagePage = messagePagesByRequest.get(request.id)
@@ -49,6 +59,7 @@ function mapRequest(request, userId, messagePagesByRequest) {
     messages: messagePage?.messages || [],
     hasOlderMessages: messagePage?.hasOlder || false,
     unreadCount: messagePage?.unreadCount || 0,
+    plan: plansByRequest.get(request.id) || null,
   }
 }
 
@@ -70,6 +81,28 @@ function getMessageErrorMessage(error) {
   }
 
   return 'Chưa gửi được tin nhắn. Hãy thử lại.'
+}
+
+function getPlanErrorMessage(error) {
+  const message = error?.message?.toLowerCase() || ''
+
+  if (message.includes('duplicate') || message.includes('unique')) {
+    return 'Cuộc trò chuyện này đã có một kế hoạch đang hoạt động.'
+  }
+
+  if (message.includes('blocked')) {
+    return 'Không thể cập nhật kế hoạch khi một trong hai tài khoản đang chặn nhau.'
+  }
+
+  if (message.includes('expired') || message.includes('future')) {
+    return 'Thời gian kế hoạch không còn hợp lệ. Hãy chọn một thời điểm mới.'
+  }
+
+  if (message.includes('row-level security') || message.includes('permission')) {
+    return 'Cậu không có quyền thực hiện thay đổi này hoặc kết nối không còn hiệu lực.'
+  }
+
+  return 'Chưa cập nhật được Coco Plan. Hãy thử lại.'
 }
 
 async function markReceivedMessagesRead(connectionRequestId, userId) {
@@ -96,6 +129,7 @@ function mergeConnections(serverConnections, currentConnections) {
       ...item,
       messages: mergeMessages(item.messages, current.messages),
       hasOlderMessages: current.hasOlderMessages,
+      plan: mergeCocoPlans(item.plan, current.plan),
     }
   })
 }
@@ -160,24 +194,55 @@ async function fetchConnections() {
     .filter((request) => request.status === 'accepted')
     .map((request) => request.id)
   const messagePagesByRequest = new Map()
+  const plansByRequest = new Map()
 
   if (acceptedRequestIds.length > 0) {
-    const messagePages = await Promise.all(
-      acceptedRequestIds.map(async (requestId) => [
-        requestId,
-        await fetchConversationState(requestId, user.id),
-      ])
-    )
+    const [messagePages, planResult] = await Promise.all([
+      Promise.all(
+        acceptedRequestIds.map(async (requestId) => [
+          requestId,
+          await fetchConversationState(requestId, user.id),
+        ])
+      ),
+      supabase
+        .from('connection_plans')
+        .select(`
+          id,
+          connection_request_id,
+          proposer_id,
+          title,
+          starts_at,
+          mode,
+          location_note,
+          status,
+          created_at,
+          updated_at
+        `)
+        .in('connection_request_id', acceptedRequestIds)
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false }),
+    ])
+
+    if (planResult.error) throw planResult.error
 
     for (const [requestId, messagePage] of messagePages) {
       messagePagesByRequest.set(requestId, messagePage)
+    }
+
+    for (const planRow of planResult.data || []) {
+      if (!plansByRequest.has(planRow.connection_request_id)) {
+        plansByRequest.set(
+          planRow.connection_request_id,
+          mapCocoPlan(planRow, user.id)
+        )
+      }
     }
   }
 
   return {
     userId: user.id,
     connections: (requests || []).map((request) => (
-      mapRequest(request, user.id, messagePagesByRequest)
+      mapRequest(request, user.id, messagePagesByRequest, plansByRequest)
     )),
   }
 }
@@ -195,16 +260,43 @@ export default function Matches() {
   const [loadingOlderId, setLoadingOlderId] = useState(null)
   const [statusMessage, setStatusMessage] = useState('')
   const [confirmation, setConfirmation] = useState(null)
+  const [planDialogConnectionId, setPlanDialogConnectionId] = useState(null)
+  const [planDraft, setPlanDraft] = useState({ ...EMPTY_COCO_PLAN_DRAFT })
+  const [planErrors, setPlanErrors] = useState({})
+  const [planValidationAttempt, setPlanValidationAttempt] = useState(0)
+  const [planSubmitError, setPlanSubmitError] = useState('')
+  const [isSavingPlan, setIsSavingPlan] = useState(false)
+  const [planAction, setPlanAction] = useState(null)
   const chatHeadingRef = useRef(null)
   const messageListRef = useRef(null)
   const lastChatTriggerRef = useRef(null)
   const shouldFocusChatRef = useRef(false)
   const confirmationTriggerRef = useRef(null)
+  const confirmationDialogRef = useRef(null)
+  const planDialogTriggerRef = useRef(null)
+  const planDialogConnectionIdRef = useRef(null)
+  const planPanelHeadingRef = useRef(null)
   const messageUserIdRef = useRef(null)
   const activeChatIdRef = useRef(null)
   const matchesMountedRef = useRef(false)
   const hasLoadedConnectionsRef = useRef(false)
   const refreshConnectionsPromiseRef = useRef(null)
+  const refreshConnectionsQueuedRef = useRef(false)
+
+  const focusAfterConfirmation = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      const trigger = confirmationTriggerRef.current
+      if (trigger?.isConnected) {
+        trigger.focus({ preventScroll: true })
+      } else if (planPanelHeadingRef.current?.isConnected) {
+        planPanelHeadingRef.current.focus({ preventScroll: true })
+      } else if (chatHeadingRef.current?.isConnected) {
+        chatHeadingRef.current.focus({ preventScroll: true })
+      } else {
+        lastChatTriggerRef.current?.focus({ preventScroll: true })
+      }
+    })
+  }, [])
 
   useEffect(() => {
     matchesMountedRef.current = true
@@ -213,8 +305,9 @@ export default function Matches() {
     }
   }, [])
 
-  const refreshConnections = useCallback(() => {
+  const refreshConnections = useCallback(function runRefreshConnections() {
     if (refreshConnectionsPromiseRef.current) {
+      refreshConnectionsQueuedRef.current = true
       return refreshConnectionsPromiseRef.current
     }
 
@@ -224,6 +317,27 @@ export default function Matches() {
 
         messageUserIdRef.current = userId
         setConnections((current) => mergeConnections(nextConnections, current))
+
+        const openPlanConnectionId = planDialogConnectionIdRef.current
+        if (
+          openPlanConnectionId
+          && !nextConnections.some((item) => (
+            item.id === openPlanConnectionId && item.status === 'accepted'
+          ))
+        ) {
+          planDialogConnectionIdRef.current = null
+          setPlanDialogConnectionId(null)
+          setPlanErrors({})
+          setPlanSubmitError('')
+          window.requestAnimationFrame(() => {
+            if (chatHeadingRef.current?.isConnected) {
+              chatHeadingRef.current.focus({ preventScroll: true })
+            } else {
+              lastChatTriggerRef.current?.focus({ preventScroll: true })
+            }
+          })
+        }
+
         hasLoadedConnectionsRef.current = true
         setLoadError('')
         setError('')
@@ -264,6 +378,15 @@ export default function Matches() {
           refreshConnectionsPromiseRef.current = null
         }
         if (matchesMountedRef.current) setIsLoading(false)
+
+        if (matchesMountedRef.current && refreshConnectionsQueuedRef.current) {
+          refreshConnectionsQueuedRef.current = false
+          void runRefreshConnections().catch((loadError) => {
+            if (matchesMountedRef.current) {
+              setError(getMatchesErrorMessage(loadError))
+            }
+          })
+        }
       })
 
     refreshConnectionsPromiseRef.current = refreshPromise
@@ -297,7 +420,7 @@ export default function Matches() {
   }
 
   useEffect(() => {
-    let messageChannel = null
+    let matchesChannel = null
 
     async function setupMessages() {
       try {
@@ -306,7 +429,7 @@ export default function Matches() {
 
         messageUserIdRef.current = user.id
 
-        messageChannel = supabase
+        matchesChannel = supabase
           .channel(`messages:${user.id}`)
           .on(
             'postgres_changes',
@@ -400,6 +523,17 @@ export default function Matches() {
               }
             }
           )
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'connection_plans' },
+            () => {
+              void refreshConnections().catch((loadError) => {
+                if (matchesMountedRef.current) {
+                  setError(getPlanErrorMessage(loadError))
+                }
+              })
+            }
+          )
           .subscribe((status) => {
             if (status === 'SUBSCRIBED') {
               void refreshConnections().catch((loadError) => {
@@ -415,7 +549,7 @@ export default function Matches() {
     void setupMessages()
 
     return () => {
-      if (messageChannel) void supabase.removeChannel(messageChannel)
+      if (matchesChannel) void supabase.removeChannel(matchesChannel)
     }
   }, [refreshConnections])
 
@@ -435,6 +569,10 @@ export default function Matches() {
     (item) => item.id === chatId && item.status === 'accepted'
   )
 
+  const planDialogConnection = connections.find(
+    (item) => item.id === planDialogConnectionId && item.status === 'accepted'
+  )
+
   const acceptedConnections = connections.filter(
     (item) => item.status === 'accepted'
   )
@@ -442,6 +580,48 @@ export default function Matches() {
     (total, connection) => total + getUnreadMessageCount(connection),
     0
   )
+  const confirmationIsBusy = confirmation?.kind === 'plan'
+    ? planAction?.id === confirmation.id
+    : actionId === confirmation?.id
+
+  useEffect(() => {
+    if (!confirmation) return undefined
+
+    function handleConfirmationKeyDown(event) {
+      if (event.key === 'Escape' && !confirmationIsBusy) {
+        event.preventDefault()
+        setConfirmation(null)
+        focusAfterConfirmation()
+        return
+      }
+
+      if (event.key !== 'Tab') return
+
+      const focusable = [...confirmationDialogRef.current.querySelectorAll(
+        'button:not([disabled])'
+      )]
+
+      if (focusable.length === 0) {
+        event.preventDefault()
+        confirmationDialogRef.current.focus({ preventScroll: true })
+        return
+      }
+
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleConfirmationKeyDown)
+    return () => document.removeEventListener('keydown', handleConfirmationKeyDown)
+  }, [confirmation, confirmationIsBusy, focusAfterConfirmation])
 
   useEffect(() => {
     activeChatIdRef.current = chat?.id ?? null
@@ -506,6 +686,7 @@ export default function Matches() {
 
     confirmationTriggerRef.current = document.activeElement
     setConfirmation({
+      kind: 'connection',
       id,
       title: 'Hủy lời mời kết nối?',
       message: `Lời mời gửi cho ${connection.name} sẽ được hủy.`,
@@ -519,6 +700,7 @@ export default function Matches() {
 
     confirmationTriggerRef.current = document.activeElement
     setConfirmation({
+      kind: 'connection',
       id,
       title: 'Ngắt kết nối?',
       message: `Cậu và ${connection.name} sẽ không còn ở trạng thái kết nối. Lịch sử tin nhắn vẫn được giữ lại.`,
@@ -528,16 +710,196 @@ export default function Matches() {
 
   function closeConfirmation() {
     setConfirmation(null)
-    confirmationTriggerRef.current?.focus({ preventScroll: true })
+    focusAfterConfirmation()
   }
 
-  async function confirmConnectionAction() {
+  async function confirmAction() {
     if (!confirmation) return
 
-    const { id } = confirmation
+    const { kind, id, nextStatus } = confirmation
     setConfirmation(null)
-    await updateRequest(id, 'cancelled')
-    confirmationTriggerRef.current?.focus({ preventScroll: true })
+
+    if (kind === 'plan') {
+      await updatePlanStatus(id, nextStatus)
+    } else {
+      await updateRequest(id, 'cancelled')
+    }
+
+    focusAfterConfirmation()
+  }
+
+  function openPlanDialog(connectionId) {
+    const connection = connections.find(
+      (item) => item.id === connectionId && item.status === 'accepted'
+    )
+    if (!connection || isSavingPlan) return
+
+    planDialogTriggerRef.current = document.activeElement
+    setPlanDraft({
+      ...EMPTY_COCO_PLAN_DRAFT,
+      startsAt: getDefaultCocoPlanStartAt(),
+    })
+    setPlanErrors({})
+    setPlanValidationAttempt(0)
+    setPlanSubmitError('')
+    planDialogConnectionIdRef.current = connectionId
+    setPlanDialogConnectionId(connectionId)
+  }
+
+  function closePlanDialog() {
+    if (isSavingPlan) return
+
+    planDialogConnectionIdRef.current = null
+    setPlanDialogConnectionId(null)
+    setPlanErrors({})
+    setPlanValidationAttempt(0)
+    setPlanSubmitError('')
+    window.requestAnimationFrame(() => {
+      planDialogTriggerRef.current?.focus({ preventScroll: true })
+    })
+  }
+
+  function changePlanDraft(field, value) {
+    setPlanDraft((current) => ({ ...current, [field]: value }))
+    setPlanErrors((current) => {
+      if (!current[field]) return current
+      const next = { ...current }
+      delete next[field]
+      return next
+    })
+    setPlanSubmitError('')
+  }
+
+  async function submitPlan(event) {
+    event.preventDefault()
+
+    const userId = messageUserIdRef.current
+    const connection = planDialogConnection
+    const validationErrors = getCocoPlanDraftErrors(planDraft)
+
+    if (Object.keys(validationErrors).length > 0) {
+      setPlanErrors(validationErrors)
+      setPlanValidationAttempt((current) => current + 1)
+      setPlanSubmitError('Hãy kiểm tra lại các trường được đánh dấu.')
+      return
+    }
+
+    if (!connection || !userId || isSavingPlan) return
+
+    setIsSavingPlan(true)
+    setPlanSubmitError('')
+
+    try {
+      const { data: insertedPlan, error: insertError } = await supabase
+        .from('connection_plans')
+        .insert(buildCocoPlanInsert(planDraft, {
+          connectionRequestId: connection.id,
+          proposerId: userId,
+        }))
+        .select(`
+          id,
+          connection_request_id,
+          proposer_id,
+          title,
+          starts_at,
+          mode,
+          location_note,
+          status,
+          created_at,
+          updated_at
+        `)
+        .single()
+
+      if (insertError) throw insertError
+
+      const plan = mapCocoPlan(insertedPlan, userId)
+      setConnections((current) => current.map((item) => (
+        item.id === connection.id ? { ...item, plan } : item
+      )))
+      planDialogConnectionIdRef.current = null
+      setPlanDialogConnectionId(null)
+      setPlanErrors({})
+      setStatusMessage(`Đã gửi Coco Plan cho ${connection.name}.`)
+      window.requestAnimationFrame(() => {
+        planPanelHeadingRef.current?.focus({ preventScroll: true })
+      })
+    } catch (planError) {
+      setPlanSubmitError(getPlanErrorMessage(planError))
+    } finally {
+      setIsSavingPlan(false)
+    }
+  }
+
+  async function updatePlanStatus(planId, status) {
+    if (planAction) return
+
+    const userId = messageUserIdRef.current
+    if (!userId) return
+
+    setPlanAction({ id: planId, status })
+    setError('')
+
+    try {
+      const { data: updatedPlan, error: updateError } = await supabase
+        .from('connection_plans')
+        .update({ status })
+        .eq('id', planId)
+        .select(`
+          id,
+          connection_request_id,
+          proposer_id,
+          title,
+          starts_at,
+          mode,
+          location_note,
+          status,
+          created_at,
+          updated_at
+        `)
+        .single()
+
+      if (updateError) throw updateError
+      if (updatedPlan.status !== status) {
+        throw new Error('Connection plan status was not updated')
+      }
+
+      const plan = mapCocoPlan(updatedPlan, userId)
+      setConnections((current) => current.map((item) => (
+        item.id === plan.connectionRequestId ? { ...item, plan } : item
+      )))
+
+      const successMessages = {
+        accepted: 'Đã chấp nhận Coco Plan.',
+        declined: 'Đã từ chối Coco Plan.',
+        cancelled: 'Đã hủy Coco Plan.',
+        completed: 'Đã đánh dấu Coco Plan hoàn thành.',
+      }
+      setStatusMessage(successMessages[status] || 'Coco Plan đã được cập nhật.')
+      window.requestAnimationFrame(() => {
+        planPanelHeadingRef.current?.focus({ preventScroll: true })
+      })
+    } catch (planError) {
+      setError(getPlanErrorMessage(planError))
+    } finally {
+      setPlanAction(null)
+    }
+  }
+
+  function requestPlanStatus(plan, status) {
+    if (status !== 'cancelled') {
+      void updatePlanStatus(plan.id, status)
+      return
+    }
+
+    confirmationTriggerRef.current = document.activeElement
+    setConfirmation({
+      kind: 'plan',
+      id: plan.id,
+      nextStatus: status,
+      title: 'Hủy Coco Plan?',
+      message: 'Kế hoạch sẽ khép lại, nhưng hai cậu vẫn giữ kết nối và có thể đề xuất kế hoạch mới.',
+      actionLabel: 'Hủy kế hoạch',
+    })
   }
 
   async function markConversationRead(id) {
@@ -620,6 +982,8 @@ export default function Matches() {
     activeChatIdRef.current = null
     setChatId(null)
     setDraft('')
+    planDialogConnectionIdRef.current = null
+    setPlanDialogConnectionId(null)
     lastChatTriggerRef.current?.focus({ preventScroll: true })
   }
 
@@ -676,6 +1040,8 @@ export default function Matches() {
       activeChatIdRef.current = null
       setChatId(null)
       setDraft('')
+      planDialogConnectionIdRef.current = null
+      setPlanDialogConnectionId(null)
     }
     setStatusMessage(`Đã chặn ${name}. Kết nối và tin nhắn mới đã được dừng.`)
   }
@@ -742,11 +1108,27 @@ export default function Matches() {
           />
         )}
 
+        {planDialogConnection && (
+          <CocoPlanDialog
+            connectionName={planDialogConnection.name}
+            draft={planDraft}
+            errors={planErrors}
+            validationAttempt={planValidationAttempt}
+            submitError={planSubmitError}
+            isSaving={isSavingPlan}
+            onChange={changePlanDraft}
+            onClose={closePlanDialog}
+            onSubmit={submitPlan}
+          />
+        )}
+
         {confirmation && (
           <div className="discover-dialog-backdrop" role="presentation">
             <section
+              ref={confirmationDialogRef}
               className="discover-profile-dialog connection-confirmation-dialog"
               role="alertdialog"
+              tabIndex="-1"
               aria-modal="true"
               aria-labelledby="connection-confirmation-title"
               aria-describedby="connection-confirmation-message"
@@ -761,6 +1143,8 @@ export default function Matches() {
                 <button
                   type="button"
                   className="view-student-button"
+                  autoFocus
+                  disabled={confirmationIsBusy}
                   onClick={closeConfirmation}
                 >
                   Quay lại
@@ -768,11 +1152,10 @@ export default function Matches() {
                 <button
                   type="button"
                   className="connect-student-button"
-                  autoFocus
-                  disabled={actionId === confirmation.id}
-                  onClick={confirmConnectionAction}
+                  disabled={confirmationIsBusy}
+                  onClick={confirmAction}
                 >
-                  {actionId === confirmation.id ? 'Đang cập nhật…' : confirmation.actionLabel}
+                  {confirmationIsBusy ? 'Đang cập nhật…' : confirmation.actionLabel}
                 </button>
               </footer>
             </section>
@@ -916,6 +1299,19 @@ export default function Matches() {
                     />
                   )}
                 </header>
+
+                <CocoPlanCard
+                  plan={chat.plan}
+                  connectionName={chat.name}
+                  headingRef={planPanelHeadingRef}
+                  pendingStatus={
+                    planAction && planAction.id === chat.plan?.id
+                      ? planAction.status
+                      : null
+                  }
+                  onCreate={() => openPlanDialog(chat.id)}
+                  onUpdateStatus={(status) => requestPlanStatus(chat.plan, status)}
+                />
 
                 <div
                   ref={messageListRef}
