@@ -123,6 +123,7 @@ export default function AppLayout({ children }) {
   const messageUnreadChannelRef = useRef(null)
   const profileChannelRef = useRef(null)
   const notificationUserIdRef = useRef(null)
+  const pendingNotificationReadsRef = useRef(new Map())
   const notificationsMountedRef = useRef(false)
   const [logoutError, setLogoutError] = useState('')
   const [notifications, setNotifications] = useState([])
@@ -164,7 +165,26 @@ export default function AppLayout({ children }) {
     if (error) {
       setNotificationsError('Chưa tải được thông báo. Hãy thử mở lại chuông.')
     } else {
-      setNotifications(normalizeNotifications(data))
+      const normalizedNotifications = normalizeNotifications(data)
+      const pendingReads = pendingNotificationReadsRef.current
+
+      for (const notification of normalizedNotifications) {
+        if (notification.read_at !== null) {
+          pendingReads.delete(notification.id)
+        }
+      }
+
+      setNotifications((current) => {
+        const currentNotifications = new Map(current.map((item) => [item.id, item]))
+
+        return normalizedNotifications.map((notification) => {
+          const pendingRead = pendingReads.get(notification.id)
+          if (!pendingRead || notification.read_at !== null) return notification
+
+          const currentReadAt = currentNotifications.get(notification.id)?.read_at
+          return { ...notification, read_at: currentReadAt ?? pendingRead.readAt }
+        })
+      })
       setNotificationsError('')
     }
 
@@ -235,6 +255,7 @@ export default function AppLayout({ children }) {
     let initialNotificationsLoaded = false
     let notificationsSubscribed = false
     let notificationCatchUpStarted = false
+    const pendingNotificationReads = pendingNotificationReadsRef.current
     notificationsMountedRef.current = true
 
     function catchUpNotifications() {
@@ -254,6 +275,7 @@ export default function AppLayout({ children }) {
         const user = await getCurrentAccount()
         if (!user || cancelled) return
 
+        pendingNotificationReads.clear()
         notificationUserIdRef.current = user.id
         setProfileName(getAuthProfileName(user) || 'Sinh viên')
         const channel = supabase
@@ -276,9 +298,20 @@ export default function AppLayout({ children }) {
                 ))
                 setNotificationAnnouncement(getNotificationMessage(incoming))
               } else if (payload.eventType === 'UPDATE') {
+                const pendingRead = pendingNotificationReads.get(payload.new.id)
+
+                if (payload.new.read_at !== null) {
+                  pendingNotificationReads.delete(payload.new.id)
+                }
+
                 setNotifications((current) => current.map((item) => (
                   item.id === payload.new.id
-                    ? { ...item, read_at: payload.new.read_at }
+                    ? {
+                        ...item,
+                        read_at: payload.new.read_at === null && pendingRead
+                          ? item.read_at ?? pendingRead.readAt
+                          : payload.new.read_at,
+                      }
                     : item
                 )))
               }
@@ -368,6 +401,7 @@ export default function AppLayout({ children }) {
       cancelled = true
       notificationsMountedRef.current = false
       notificationUserIdRef.current = null
+      pendingNotificationReads.clear()
       window.removeEventListener('focus', handleWindowFocus)
       window.removeEventListener('cocoapp:profile-updated', handleProfileUpdated)
 
@@ -419,28 +453,71 @@ export default function AppLayout({ children }) {
     }
   }, [loadNotifications, notificationsOpen])
 
-  async function markNotificationRead(notification) {
-    setNotificationsOpen(false)
-    const target = getNotificationTarget(notification)
+  async function persistNotificationRead({ notificationId, readAt, token, userId }) {
+    let updateFailed
 
-    if (notification.read_at === null) {
-      const readAt = new Date().toISOString()
-      setNotifications((current) => current.map((item) => (
-        item.id === notification.id ? { ...item, read_at: readAt } : item
-      )))
-
+    try {
       const { error } = await supabase
         .from('notifications')
         .update({ read_at: readAt })
-        .eq('id', notification.id)
+        .eq('id', notificationId)
+        .eq('recipient_id', userId)
         .is('read_at', null)
 
-      if (error) {
-        setNotificationsError('Chưa đánh dấu được thông báo là đã đọc.')
-      }
+      updateFailed = Boolean(error)
+    } catch {
+      updateFailed = true
+    }
+
+    if (!notificationsMountedRef.current) return
+
+    const pendingRead = pendingNotificationReadsRef.current.get(notificationId)
+    if (pendingRead?.token !== token) return
+
+    if (!updateFailed) {
+      void loadNotifications({ silent: true })
+      return
+    }
+
+    pendingNotificationReadsRef.current.delete(notificationId)
+    setNotifications((current) => current.map((item) => (
+      item.id === notificationId && item.read_at === readAt
+        ? { ...item, read_at: null }
+        : item
+    )))
+
+    const errorMessage = 'Chưa đánh dấu được thông báo là đã đọc.'
+    setNotificationsError(errorMessage)
+    setNotificationAnnouncement(errorMessage)
+  }
+
+  function markNotificationRead(notification) {
+    setNotificationsOpen(false)
+    const target = getNotificationTarget(notification)
+    const notificationId = notification.id
+    const userId = notificationUserIdRef.current
+    let optimisticRead = null
+
+    if (
+      notification.read_at === null
+      && notificationId
+      && userId
+      && !pendingNotificationReadsRef.current.has(notificationId)
+    ) {
+      const readAt = new Date().toISOString()
+      const token = Symbol(notificationId)
+      optimisticRead = { notificationId, readAt, token, userId }
+      pendingNotificationReadsRef.current.set(notificationId, { readAt, token })
+      setNotifications((current) => current.map((item) => (
+        item.id === notificationId ? { ...item, read_at: readAt } : item
+      )))
     }
 
     navigate(target)
+
+    if (optimisticRead) {
+      void persistNotificationRead(optimisticRead)
+    }
   }
 
   async function markAllNotificationsRead() {
@@ -472,6 +549,8 @@ export default function AppLayout({ children }) {
     try {
       await logoutAccount()
 
+      pendingNotificationReadsRef.current.clear()
+      notificationUserIdRef.current = null
       if (notificationChannelRef.current) {
         await supabase.removeChannel(notificationChannelRef.current)
         notificationChannelRef.current = null

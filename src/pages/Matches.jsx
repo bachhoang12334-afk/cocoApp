@@ -12,7 +12,10 @@ import {
   normalizeMessagePage,
 } from '../lib/messageState'
 import { normalizeConnectionRequests } from '../lib/profileAccess'
-import { parseCocoPlanDeepLink } from '../lib/notificationNavigation'
+import {
+  parseCocoPlanDeepLink,
+  parseConnectionNotificationDeepLink,
+} from '../lib/notificationNavigation'
 import { supabase } from '../lib/supabaseClient'
 import SafetyActions from '../components/SafetyActions'
 import TrustBadge from '../components/TrustBadge'
@@ -33,6 +36,12 @@ const purposeLabels = {
   study_group: 'Học nhóm',
   team_project: 'Team Project',
   roommates: 'Ghép trọ',
+}
+
+const terminalConnectionNotificationMessages = {
+  request_declined: 'Lời mời kết nối đã bị từ chối và không còn trong danh sách chờ.',
+  request_cancelled: 'Lời mời kết nối đã bị hủy và không còn trong danh sách chờ.',
+  connection_disconnected: 'Kết nối đã được ngắt và cuộc trò chuyện không còn khả dụng.',
 }
 
 function mapRequest(request, userId, messagePagesByRequest, plansByRequest) {
@@ -277,6 +286,17 @@ export default function Matches() {
   const planDeepLink = parseCocoPlanDeepLink(location.search)
   const deepLinkConnectionId = planDeepLink?.connectionId ?? null
   const deepLinkPlanId = planDeepLink?.planId ?? null
+  const planDeepLinkKey = deepLinkConnectionId && deepLinkPlanId
+    ? `${deepLinkConnectionId}:${deepLinkPlanId}:${location.key}`
+    : null
+  const connectionNotificationDeepLink = parseConnectionNotificationDeepLink(location.search)
+  const connectionDeepLinkKind = connectionNotificationDeepLink?.kind ?? null
+  const connectionDeepLinkTab = connectionNotificationDeepLink?.tab ?? null
+  const connectionDeepLinkConnectionId = connectionNotificationDeepLink?.connectionId ?? null
+  const connectionDeepLinkNotificationType = connectionNotificationDeepLink?.notificationType ?? null
+  const connectionNotificationDeepLinkKey = connectionNotificationDeepLink
+    ? `${connectionDeepLinkKind}:${connectionDeepLinkConnectionId || connectionDeepLinkNotificationType}:${location.key}`
+    : null
   const [connections, setConnections] = useState([])
   const [error, setError] = useState('')
   const [loadError, setLoadError] = useState('')
@@ -317,7 +337,43 @@ export default function Matches() {
   const linkedPlanTargetRef = useRef(null)
   const handledPlanDeepLinkRef = useRef(null)
   const loadingPlanDeepLinkRef = useRef(null)
-  const planDeepLinkInteractionRef = useRef(0)
+  const handledConnectionDeepLinkRef = useRef(null)
+  const loadingConnectionDeepLinkRef = useRef(null)
+  const deepLinkInteractionRef = useRef(0)
+  const pendingConnectionCardRefs = useRef(new Map())
+  const pendingConnectionFocusRef = useRef(null)
+  const chatFocusGenerationRef = useRef(null)
+
+  const invalidateDeepLinkNavigation = useCallback(() => {
+    deepLinkInteractionRef.current += 1
+    loadingPlanDeepLinkRef.current = null
+    loadingConnectionDeepLinkRef.current = null
+    pendingConnectionFocusRef.current = null
+    chatFocusGenerationRef.current = null
+
+    if (planDeepLinkKey) {
+      handledPlanDeepLinkRef.current = planDeepLinkKey
+    }
+    if (connectionNotificationDeepLinkKey) {
+      handledConnectionDeepLinkRef.current = connectionNotificationDeepLinkKey
+    }
+  }, [connectionNotificationDeepLinkKey, planDeepLinkKey])
+
+  const clearChatState = useCallback(({ restoreFocus = false } = {}) => {
+    activeChatIdRef.current = null
+    shouldFocusChatRef.current = false
+    chatFocusGenerationRef.current = null
+    setChatId(null)
+    setDraft('')
+    setLinkedPlan(null)
+    setLinkedPlanConnectionId(null)
+    planDialogConnectionIdRef.current = null
+    setPlanDialogConnectionId(null)
+
+    if (restoreFocus) {
+      lastChatTriggerRef.current?.focus({ preventScroll: true })
+    }
+  }, [])
 
   const focusAfterConfirmation = useCallback(() => {
     window.requestAnimationFrame(() => {
@@ -691,21 +747,21 @@ export default function Matches() {
       return undefined
     }
 
-    const deepLinkKey = `${deepLinkConnectionId}:${deepLinkPlanId}:${location.key}`
     if (
-      handledPlanDeepLinkRef.current === deepLinkKey
-      || loadingPlanDeepLinkRef.current === deepLinkKey
+      !planDeepLinkKey
+      || handledPlanDeepLinkRef.current === planDeepLinkKey
+      || loadingPlanDeepLinkRef.current === planDeepLinkKey
     ) {
       return undefined
     }
 
-    loadingPlanDeepLinkRef.current = deepLinkKey
-    const interactionVersion = planDeepLinkInteractionRef.current
+    loadingPlanDeepLinkRef.current = planDeepLinkKey
+    const interactionVersion = deepLinkInteractionRef.current
     let cancelled = false
 
     async function openLinkedPlan() {
       if (!isDeepLinkConnectionAccepted) {
-        handledPlanDeepLinkRef.current = deepLinkKey
+        handledPlanDeepLinkRef.current = planDeepLinkKey
         loadingPlanDeepLinkRef.current = null
         setStatusMessage('Coco Plan này không còn thuộc một kết nối đang hoạt động.')
         return
@@ -726,10 +782,10 @@ export default function Matches() {
         if (
           cancelled
           || !matchesMountedRef.current
-          || planDeepLinkInteractionRef.current !== interactionVersion
+          || deepLinkInteractionRef.current !== interactionVersion
         ) return
 
-        handledPlanDeepLinkRef.current = deepLinkKey
+        handledPlanDeepLinkRef.current = planDeepLinkKey
         if (!exactPlan) {
           setStatusMessage('Coco Plan này không còn khả dụng hoặc cậu không có quyền xem.')
           return
@@ -745,6 +801,12 @@ export default function Matches() {
         void markConversationRead(deepLinkConnectionId)
 
         window.requestAnimationFrame(() => {
+          if (
+            deepLinkInteractionRef.current !== interactionVersion
+            || activeChatIdRef.current !== deepLinkConnectionId
+            || linkedPlanTargetRef.current !== `${deepLinkConnectionId}:${deepLinkPlanId}`
+          ) return
+
           const heading = planPanelHeadingRef.current
           heading?.focus({ preventScroll: true })
           heading?.scrollIntoView({ block: 'center' })
@@ -753,15 +815,15 @@ export default function Matches() {
         if (
           !cancelled
           && matchesMountedRef.current
-          && planDeepLinkInteractionRef.current === interactionVersion
+          && deepLinkInteractionRef.current === interactionVersion
         ) {
-          handledPlanDeepLinkRef.current = deepLinkKey
+          handledPlanDeepLinkRef.current = planDeepLinkKey
           setStatusMessage('Chưa mở được Coco Plan từ thông báo. Cậu vẫn có thể chọn cuộc trò chuyện bên dưới.')
         }
       } finally {
         if (
-          loadingPlanDeepLinkRef.current === deepLinkKey
-          && planDeepLinkInteractionRef.current === interactionVersion
+          loadingPlanDeepLinkRef.current === planDeepLinkKey
+          && deepLinkInteractionRef.current === interactionVersion
         ) {
           loadingPlanDeepLinkRef.current = null
         }
@@ -772,7 +834,7 @@ export default function Matches() {
 
     return () => {
       cancelled = true
-      if (loadingPlanDeepLinkRef.current === deepLinkKey) {
+      if (loadingPlanDeepLinkRef.current === planDeepLinkKey) {
         loadingPlanDeepLinkRef.current = null
       }
     }
@@ -781,8 +843,192 @@ export default function Matches() {
     deepLinkPlanId,
     isLoading,
     isDeepLinkConnectionAccepted,
-    location.key,
     markConversationRead,
+    planDeepLinkKey,
+  ])
+
+  useEffect(() => {
+    if (
+      !connectionNotificationDeepLinkKey
+      || handledConnectionDeepLinkRef.current === connectionNotificationDeepLinkKey
+      || loadingConnectionDeepLinkRef.current === connectionNotificationDeepLinkKey
+    ) {
+      return undefined
+    }
+
+    const interactionVersion = deepLinkInteractionRef.current
+
+    if (connectionDeepLinkKind === 'terminal-event') {
+      handledConnectionDeepLinkRef.current = connectionNotificationDeepLinkKey
+      pendingConnectionFocusRef.current = null
+      clearChatState()
+      setTab(connectionDeepLinkTab)
+      setStatusMessage(
+        terminalConnectionNotificationMessages[connectionDeepLinkNotificationType]
+        || 'Trạng thái kết nối đã thay đổi.'
+      )
+      return undefined
+    }
+
+    if (isLoading || !hasLoadedConnectionsRef.current) return undefined
+
+    loadingConnectionDeepLinkRef.current = connectionNotificationDeepLinkKey
+    let cancelled = false
+
+    function isCurrentDeepLink() {
+      return (
+        !cancelled
+        && matchesMountedRef.current
+        && deepLinkInteractionRef.current === interactionVersion
+        && loadingConnectionDeepLinkRef.current === connectionNotificationDeepLinkKey
+      )
+    }
+
+    async function openConnectionNotificationTarget() {
+      try {
+        let currentRefresh = refreshConnectionsPromiseRef.current
+        while (currentRefresh) {
+          try {
+            await currentRefresh
+          } catch {
+            // The authoritative fetch below gets one independent chance to recover.
+          }
+
+          if (!isCurrentDeepLink()) return
+
+          const nextRefresh = refreshConnectionsPromiseRef.current
+          if (!nextRefresh || nextRefresh === currentRefresh) break
+          currentRefresh = nextRefresh
+        }
+
+        if (!isCurrentDeepLink()) return
+
+        const { userId, connections: nextConnections } = await fetchConnections()
+        if (!isCurrentDeepLink()) return
+
+        const exactConnection = connectionDeepLinkConnectionId
+          ? nextConnections.find((item) => item.id === connectionDeepLinkConnectionId)
+          : null
+
+        messageUserIdRef.current = userId
+        setConnections((current) => mergeConnections(nextConnections, current))
+        hasLoadedConnectionsRef.current = true
+        setLoadError('')
+        setError('')
+        handledConnectionDeepLinkRef.current = connectionNotificationDeepLinkKey
+        pendingConnectionFocusRef.current = null
+        clearChatState()
+        setTab(connectionDeepLinkTab)
+
+        if (connectionDeepLinkKind === 'pending-request') {
+          if (exactConnection?.status === 'pending' && exactConnection.isIncoming) {
+            pendingConnectionFocusRef.current = {
+              connectionId: connectionDeepLinkConnectionId,
+              interactionVersion,
+            }
+            setStatusMessage('Đã mở đúng lời mời kết nối từ thông báo.')
+          } else {
+            setStatusMessage('Lời mời kết nối này không còn chờ cậu phản hồi.')
+          }
+          return
+        }
+
+        if (exactConnection?.status !== 'accepted') {
+          setStatusMessage('Kết nối này không còn ở trạng thái đã chấp nhận.')
+          return
+        }
+
+        shouldFocusChatRef.current = true
+        chatFocusGenerationRef.current = interactionVersion
+        activeChatIdRef.current = connectionDeepLinkConnectionId
+        setChatId(connectionDeepLinkConnectionId)
+        setStatusMessage('Đã mở đúng cuộc trò chuyện từ thông báo.')
+        void markConversationRead(connectionDeepLinkConnectionId)
+      } catch {
+        if (!isCurrentDeepLink()) return
+
+        handledConnectionDeepLinkRef.current = connectionNotificationDeepLinkKey
+        pendingConnectionFocusRef.current = null
+        clearChatState()
+        setTab(connectionDeepLinkTab)
+        setStatusMessage(
+          connectionDeepLinkKind === 'pending-request'
+            ? 'Chưa mở được lời mời từ thông báo. Cậu vẫn có thể xem danh sách đang chờ bên dưới.'
+            : 'Chưa mở được cuộc trò chuyện từ thông báo. Cậu vẫn có thể chọn một kết nối bên dưới.'
+        )
+      } finally {
+        if (
+          loadingConnectionDeepLinkRef.current === connectionNotificationDeepLinkKey
+          && deepLinkInteractionRef.current === interactionVersion
+        ) {
+          loadingConnectionDeepLinkRef.current = null
+        }
+      }
+    }
+
+    void openConnectionNotificationTarget()
+
+    return () => {
+      cancelled = true
+      if (loadingConnectionDeepLinkRef.current === connectionNotificationDeepLinkKey) {
+        loadingConnectionDeepLinkRef.current = null
+      }
+    }
+  }, [
+    clearChatState,
+    connectionDeepLinkConnectionId,
+    connectionDeepLinkKind,
+    connectionDeepLinkNotificationType,
+    connectionDeepLinkTab,
+    connectionNotificationDeepLinkKey,
+    isLoading,
+    markConversationRead,
+  ])
+
+  useEffect(() => {
+    const focusTarget = pendingConnectionFocusRef.current
+    if (!focusTarget || tab !== 'pending') return undefined
+
+    const targetConnection = connections.find((item) => (
+      item.id === focusTarget.connectionId
+      && item.status === 'pending'
+      && item.isIncoming
+    ))
+    if (!targetConnection) return undefined
+
+    const frame = window.requestAnimationFrame(() => {
+      const latestFocusTarget = pendingConnectionFocusRef.current
+      if (
+        !latestFocusTarget
+        || latestFocusTarget.connectionId !== focusTarget.connectionId
+        || latestFocusTarget.interactionVersion !== focusTarget.interactionVersion
+        || deepLinkInteractionRef.current !== focusTarget.interactionVersion
+        || connectionDeepLinkKind !== 'pending-request'
+        || connectionDeepLinkConnectionId !== focusTarget.connectionId
+      ) return
+
+      const card = pendingConnectionCardRefs.current.get(focusTarget.connectionId)
+      if (!card?.isConnected) return
+
+      card.focus({ preventScroll: true })
+
+      const focusTargetAfterFocus = pendingConnectionFocusRef.current
+      if (
+        focusTargetAfterFocus?.connectionId !== focusTarget.connectionId
+        || focusTargetAfterFocus?.interactionVersion !== focusTarget.interactionVersion
+        || deepLinkInteractionRef.current !== focusTarget.interactionVersion
+      ) return
+
+      card.scrollIntoView({ block: 'center' })
+      pendingConnectionFocusRef.current = null
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [
+    connections,
+    connectionDeepLinkConnectionId,
+    connectionDeepLinkKind,
+    tab,
   ])
 
   useEffect(() => {
@@ -830,8 +1076,19 @@ export default function Matches() {
 
   useEffect(() => {
     if (chat && shouldFocusChatRef.current) {
+      const focusGeneration = chatFocusGenerationRef.current
+      if (
+        focusGeneration !== null
+        && deepLinkInteractionRef.current !== focusGeneration
+      ) {
+        shouldFocusChatRef.current = false
+        chatFocusGenerationRef.current = null
+        return
+      }
+
       chatHeadingRef.current?.focus({ preventScroll: true })
       shouldFocusChatRef.current = false
+      chatFocusGenerationRef.current = null
     }
   }, [chat, chatId])
 
@@ -846,6 +1103,7 @@ export default function Matches() {
     const request = connections.find((item) => item.id === id)
     if (!request || !['pending', 'accepted'].includes(request.status) || actionId) return
 
+    invalidateDeepLinkNavigation()
     setActionId(id)
     setError('')
 
@@ -885,6 +1143,7 @@ export default function Matches() {
     const connection = connections.find((item) => item.id === id)
     if (!connection) return
 
+    invalidateDeepLinkNavigation()
     confirmationTriggerRef.current = document.activeElement
     setConfirmation({
       kind: 'connection',
@@ -899,6 +1158,7 @@ export default function Matches() {
     const connection = connections.find((item) => item.id === id)
     if (!connection) return
 
+    invalidateDeepLinkNavigation()
     confirmationTriggerRef.current = document.activeElement
     setConfirmation({
       kind: 'connection',
@@ -935,6 +1195,7 @@ export default function Matches() {
     )
     if (!connection || isSavingPlan) return
 
+    invalidateDeepLinkNavigation()
     planDialogTriggerRef.current = document.activeElement
     setPlanDraft({
       ...EMPTY_COCO_PLAN_DRAFT,
@@ -950,6 +1211,7 @@ export default function Matches() {
   function closePlanDialog() {
     if (isSavingPlan) return
 
+    invalidateDeepLinkNavigation()
     planDialogConnectionIdRef.current = null
     setPlanDialogConnectionId(null)
     setPlanErrors({})
@@ -1099,6 +1361,8 @@ export default function Matches() {
   }
 
   function requestPlanStatus(plan, status) {
+    invalidateDeepLinkNavigation()
+
     if (status !== 'cancelled') {
       void updatePlanStatus(plan.id, status, plan)
       return
@@ -1124,6 +1388,7 @@ export default function Matches() {
       return
     }
 
+    invalidateDeepLinkNavigation()
     const messageList = messageListRef.current
     const previousScrollHeight = messageList?.scrollHeight || 0
     const previousScrollTop = messageList?.scrollTop || 0
@@ -1160,16 +1425,13 @@ export default function Matches() {
   }
 
   function openChat(id) {
-    planDeepLinkInteractionRef.current += 1
-    loadingPlanDeepLinkRef.current = null
-    if (deepLinkConnectionId && deepLinkPlanId) {
-      handledPlanDeepLinkRef.current = `${deepLinkConnectionId}:${deepLinkPlanId}:${location.key}`
-    }
+    invalidateDeepLinkNavigation()
     lastChatTriggerRef.current = document.activeElement
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur()
     }
     shouldFocusChatRef.current = window.matchMedia('(max-width: 760px)').matches
+    chatFocusGenerationRef.current = null
     activeChatIdRef.current = id
     setChatId(id)
     setDraft('')
@@ -1179,19 +1441,14 @@ export default function Matches() {
   }
 
   function closeChat() {
-    planDeepLinkInteractionRef.current += 1
-    loadingPlanDeepLinkRef.current = null
-    if (deepLinkConnectionId && deepLinkPlanId) {
-      handledPlanDeepLinkRef.current = `${deepLinkConnectionId}:${deepLinkPlanId}:${location.key}`
-    }
-    activeChatIdRef.current = null
-    setChatId(null)
-    setDraft('')
-    setLinkedPlan(null)
-    setLinkedPlanConnectionId(null)
-    planDialogConnectionIdRef.current = null
-    setPlanDialogConnectionId(null)
-    lastChatTriggerRef.current?.focus({ preventScroll: true })
+    invalidateDeepLinkNavigation()
+    clearChatState({ restoreFocus: true })
+  }
+
+  function selectMatchesTab(nextTab) {
+    invalidateDeepLinkNavigation()
+    setTab(nextTab)
+    clearChatState()
   }
 
   async function sendMessage(event) {
@@ -1201,6 +1458,7 @@ export default function Matches() {
     const userId = messageUserIdRef.current
     if (!text || !chat || !userId || isSendingMessage) return
 
+    invalidateDeepLinkNavigation()
     const connectionRequestId = chat.id
     setIsSendingMessage(true)
     setError('')
@@ -1238,6 +1496,8 @@ export default function Matches() {
   }
 
   function handleBlocked(profileId, name) {
+    invalidateDeepLinkNavigation()
+
     const blockedConnectionIds = connections
       .filter((item) => item.profileId === profileId)
       .map((item) => item.id)
@@ -1254,6 +1514,7 @@ export default function Matches() {
   }
 
   function handleReported(_profileId, name) {
+    invalidateDeepLinkNavigation()
     setStatusMessage(`Đã gửi báo cáo về ${name}. Nội dung báo cáo được giữ kín.`)
   }
 
@@ -1379,10 +1640,7 @@ export default function Matches() {
             role="tab"
             aria-selected={tab === 'pending'}
             aria-controls="matches-panel"
-            onClick={() => {
-              setTab('pending')
-              closeChat()
-            }}
+            onClick={() => selectMatchesTab('pending')}
           >
             Đang chờ ({pendingCount})
               </button>
@@ -1394,10 +1652,7 @@ export default function Matches() {
             role="tab"
             aria-selected={tab === 'accepted'}
             aria-controls="matches-panel"
-            onClick={() => {
-              setTab('accepted')
-              closeChat()
-            }}
+            onClick={() => selectMatchesTab('accepted')}
           >
             Đã kết nối ({acceptedCount})
               </button>
@@ -1519,6 +1774,7 @@ export default function Matches() {
                   }
                   onCreate={() => openPlanDialog(chat.id)}
                   onShowCurrent={() => {
+                    invalidateDeepLinkNavigation()
                     setLinkedPlan(null)
                     setLinkedPlanConnectionId(null)
                     window.requestAnimationFrame(() => {
@@ -1580,7 +1836,10 @@ export default function Matches() {
                     <span>Tin nhắn</span>
                     <textarea
                       value={draft}
-                      onChange={(event) => setDraft(event.target.value)}
+                      onChange={(event) => {
+                        invalidateDeepLinkNavigation()
+                        setDraft(event.target.value)
+                      }}
                       placeholder="Nhập lời chào..."
                       maxLength={1000}
                       required
@@ -1611,13 +1870,25 @@ export default function Matches() {
         ) : (
           <div className="student-card-grid">
             {visibleConnections.map((item) => (
-              <article className="discover-student-card connection-card" key={item.id}>
+              <article
+                className="discover-student-card connection-card"
+                key={item.id}
+                ref={(card) => {
+                  if (card) {
+                    pendingConnectionCardRefs.current.set(item.id, card)
+                  } else {
+                    pendingConnectionCardRefs.current.delete(item.id)
+                  }
+                }}
+                tabIndex="-1"
+                aria-labelledby={`connection-card-title-${item.id}`}
+              >
                 <div className="discover-avatar">
                   {item.name.trim().split(/\s+/).pop()?.[0] || '?'}
                 </div>
 
                 <div className="student-main-info">
-                  <h2>{item.name}</h2>
+                  <h2 id={`connection-card-title-${item.id}`}>{item.name}</h2>
                   <p>{item.major}</p>
                   <TrustBadge profile={item} compact />
                 </div>
