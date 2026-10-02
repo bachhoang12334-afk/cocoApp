@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import AppLayout, { Icon } from '../components/AppLayout'
 import { getCurrentAccount } from '../auth'
 import { useConnectionRequestRefresh } from '../hooks/useConnectionRequestRefresh'
@@ -12,6 +12,7 @@ import {
   normalizeMessagePage,
 } from '../lib/messageState'
 import { normalizeConnectionRequests } from '../lib/profileAccess'
+import { parseCocoPlanDeepLink } from '../lib/notificationNavigation'
 import { supabase } from '../lib/supabaseClient'
 import SafetyActions from '../components/SafetyActions'
 import TrustBadge from '../components/TrustBadge'
@@ -247,7 +248,34 @@ async function fetchConnections() {
   }
 }
 
+async function fetchLinkedCocoPlan(connectionRequestId, planId, userId) {
+  const { data, error } = await supabase
+    .from('connection_plans')
+    .select(`
+      id,
+      connection_request_id,
+      proposer_id,
+      title,
+      starts_at,
+      mode,
+      location_note,
+      status,
+      created_at,
+      updated_at
+    `)
+    .eq('id', planId)
+    .eq('connection_request_id', connectionRequestId)
+    .maybeSingle()
+
+  if (error) throw error
+  return data ? mapCocoPlan(data, userId) : null
+}
+
 export default function Matches() {
+  const location = useLocation()
+  const planDeepLink = parseCocoPlanDeepLink(location.search)
+  const deepLinkConnectionId = planDeepLink?.connectionId ?? null
+  const deepLinkPlanId = planDeepLink?.planId ?? null
   const [connections, setConnections] = useState([])
   const [error, setError] = useState('')
   const [loadError, setLoadError] = useState('')
@@ -267,6 +295,8 @@ export default function Matches() {
   const [planSubmitError, setPlanSubmitError] = useState('')
   const [isSavingPlan, setIsSavingPlan] = useState(false)
   const [planAction, setPlanAction] = useState(null)
+  const [linkedPlan, setLinkedPlan] = useState(null)
+  const [linkedPlanConnectionId, setLinkedPlanConnectionId] = useState(null)
   const chatHeadingRef = useRef(null)
   const messageListRef = useRef(null)
   const lastChatTriggerRef = useRef(null)
@@ -282,6 +312,11 @@ export default function Matches() {
   const hasLoadedConnectionsRef = useRef(false)
   const refreshConnectionsPromiseRef = useRef(null)
   const refreshConnectionsQueuedRef = useRef(false)
+  const linkedPlanRef = useRef(null)
+  const linkedPlanTargetRef = useRef(null)
+  const handledPlanDeepLinkRef = useRef(null)
+  const loadingPlanDeepLinkRef = useRef(null)
+  const planDeepLinkInteractionRef = useRef(0)
 
   const focusAfterConfirmation = useCallback(() => {
     window.requestAnimationFrame(() => {
@@ -298,12 +333,50 @@ export default function Matches() {
     })
   }, [])
 
+  const markConversationRead = useCallback(async (id) => {
+    const userId = messageUserIdRef.current
+    if (!userId) return
+
+    try {
+      const receipts = await markReceivedMessagesRead(id, userId)
+      if (!matchesMountedRef.current) return
+
+      setConnections((current) => applyReadReceipts(current, receipts))
+      const unreadCount = await fetchUnreadMessageCount(id, userId)
+      if (matchesMountedRef.current) {
+        setConnections((current) => current.map((item) => (
+          item.id === id ? { ...item, unreadCount } : item
+        )))
+      }
+    } catch {
+      if (matchesMountedRef.current) {
+        setError('Chưa đánh dấu được tin nhắn là đã đọc.')
+      }
+    }
+  }, [])
+
   useEffect(() => {
     matchesMountedRef.current = true
     return () => {
       matchesMountedRef.current = false
     }
   }, [])
+
+  useEffect(() => {
+    linkedPlanRef.current = linkedPlan
+  }, [linkedPlan])
+
+  useEffect(() => {
+    const nextTarget = deepLinkConnectionId && deepLinkPlanId
+      ? `${deepLinkConnectionId}:${deepLinkPlanId}`
+      : null
+
+    if (linkedPlanTargetRef.current === nextTarget) return
+
+    linkedPlanTargetRef.current = nextTarget
+    setLinkedPlan(null)
+    setLinkedPlanConnectionId(null)
+  }, [deepLinkConnectionId, deepLinkPlanId])
 
   const refreshConnections = useCallback(function runRefreshConnections() {
     if (refreshConnectionsPromiseRef.current) {
@@ -526,7 +599,15 @@ export default function Matches() {
           .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'connection_plans' },
-            () => {
+            (payload) => {
+              if (
+                payload.eventType === 'UPDATE'
+                && payload.new?.id === linkedPlanRef.current?.id
+                && messageUserIdRef.current
+              ) {
+                setLinkedPlan(mapCocoPlan(payload.new, messageUserIdRef.current))
+              }
+
               void refreshConnections().catch((loadError) => {
                 if (matchesMountedRef.current) {
                   setError(getPlanErrorMessage(loadError))
@@ -568,6 +649,21 @@ export default function Matches() {
   const chat = connections.find(
     (item) => item.id === chatId && item.status === 'accepted'
   )
+  const deepLinkConnection = deepLinkConnectionId
+    ? connections.find((item) => item.id === deepLinkConnectionId)
+    : null
+  const isDeepLinkConnectionAccepted = deepLinkConnection?.status === 'accepted'
+  const displayedPlan = chat
+    && linkedPlanConnectionId === chat.id
+    && linkedPlan
+    ? linkedPlan
+    : chat?.plan
+  const hasNewerActivePlan = Boolean(
+    linkedPlan
+    && chat?.plan
+    && linkedPlan.id !== chat.plan.id
+    && ['proposed', 'accepted'].includes(chat.plan.status)
+  )
 
   const planDialogConnection = connections.find(
     (item) => item.id === planDialogConnectionId && item.status === 'accepted'
@@ -583,6 +679,110 @@ export default function Matches() {
   const confirmationIsBusy = confirmation?.kind === 'plan'
     ? planAction?.id === confirmation.id
     : actionId === confirmation?.id
+
+  useEffect(() => {
+    if (
+      !deepLinkConnectionId
+      || !deepLinkPlanId
+      || isLoading
+      || !hasLoadedConnectionsRef.current
+    ) {
+      return undefined
+    }
+
+    const deepLinkKey = `${deepLinkConnectionId}:${deepLinkPlanId}:${location.key}`
+    if (
+      handledPlanDeepLinkRef.current === deepLinkKey
+      || loadingPlanDeepLinkRef.current === deepLinkKey
+    ) {
+      return undefined
+    }
+
+    loadingPlanDeepLinkRef.current = deepLinkKey
+    const interactionVersion = planDeepLinkInteractionRef.current
+    let cancelled = false
+
+    async function openLinkedPlan() {
+      if (!isDeepLinkConnectionAccepted) {
+        handledPlanDeepLinkRef.current = deepLinkKey
+        loadingPlanDeepLinkRef.current = null
+        setStatusMessage('Coco Plan này không còn thuộc một kết nối đang hoạt động.')
+        return
+      }
+
+      const userId = messageUserIdRef.current
+      if (!userId) {
+        loadingPlanDeepLinkRef.current = null
+        return
+      }
+
+      try {
+        const exactPlan = await fetchLinkedCocoPlan(
+          deepLinkConnectionId,
+          deepLinkPlanId,
+          userId
+        )
+        if (
+          cancelled
+          || !matchesMountedRef.current
+          || planDeepLinkInteractionRef.current !== interactionVersion
+        ) return
+
+        handledPlanDeepLinkRef.current = deepLinkKey
+        if (!exactPlan) {
+          setStatusMessage('Coco Plan này không còn khả dụng hoặc cậu không có quyền xem.')
+          return
+        }
+
+        setTab('accepted')
+        activeChatIdRef.current = deepLinkConnectionId
+        setChatId(deepLinkConnectionId)
+        setDraft('')
+        setLinkedPlan(exactPlan)
+        setLinkedPlanConnectionId(deepLinkConnectionId)
+        setStatusMessage('Đã mở đúng Coco Plan từ thông báo.')
+        void markConversationRead(deepLinkConnectionId)
+
+        window.requestAnimationFrame(() => {
+          const heading = planPanelHeadingRef.current
+          heading?.focus({ preventScroll: true })
+          heading?.scrollIntoView({ block: 'center' })
+        })
+      } catch {
+        if (
+          !cancelled
+          && matchesMountedRef.current
+          && planDeepLinkInteractionRef.current === interactionVersion
+        ) {
+          handledPlanDeepLinkRef.current = deepLinkKey
+          setStatusMessage('Chưa mở được Coco Plan từ thông báo. Cậu vẫn có thể chọn cuộc trò chuyện bên dưới.')
+        }
+      } finally {
+        if (
+          loadingPlanDeepLinkRef.current === deepLinkKey
+          && planDeepLinkInteractionRef.current === interactionVersion
+        ) {
+          loadingPlanDeepLinkRef.current = null
+        }
+      }
+    }
+
+    void openLinkedPlan()
+
+    return () => {
+      cancelled = true
+      if (loadingPlanDeepLinkRef.current === deepLinkKey) {
+        loadingPlanDeepLinkRef.current = null
+      }
+    }
+  }, [
+    deepLinkConnectionId,
+    deepLinkPlanId,
+    isLoading,
+    isDeepLinkConnectionAccepted,
+    location.key,
+    markConversationRead,
+  ])
 
   useEffect(() => {
     if (!confirmation) return undefined
@@ -816,6 +1016,8 @@ export default function Matches() {
       setConnections((current) => current.map((item) => (
         item.id === connection.id ? { ...item, plan } : item
       )))
+      setLinkedPlan(null)
+      setLinkedPlanConnectionId(null)
       planDialogConnectionIdRef.current = null
       setPlanDialogConnectionId(null)
       setPlanErrors({})
@@ -867,6 +1069,7 @@ export default function Matches() {
       setConnections((current) => current.map((item) => (
         item.id === plan.connectionRequestId ? { ...item, plan } : item
       )))
+      setLinkedPlan((current) => current?.id === plan.id ? plan : current)
 
       const successMessages = {
         accepted: 'Đã chấp nhận Coco Plan.',
@@ -900,26 +1103,6 @@ export default function Matches() {
       message: 'Kế hoạch sẽ khép lại, nhưng hai cậu vẫn giữ kết nối và có thể đề xuất kế hoạch mới.',
       actionLabel: 'Hủy kế hoạch',
     })
-  }
-
-  async function markConversationRead(id) {
-    const userId = messageUserIdRef.current
-    if (!userId) return
-
-    try {
-      const receipts = await markReceivedMessagesRead(id, userId)
-      if (!matchesMountedRef.current) return
-
-      setConnections((current) => applyReadReceipts(current, receipts))
-      const unreadCount = await fetchUnreadMessageCount(id, userId)
-      if (matchesMountedRef.current) {
-        setConnections((current) => current.map((item) => (
-          item.id === id ? { ...item, unreadCount } : item
-        )))
-      }
-    } catch {
-      setError('Chưa đánh dấu được tin nhắn là đã đọc.')
-    }
   }
 
   async function loadOlderMessages(id) {
@@ -967,6 +1150,11 @@ export default function Matches() {
   }
 
   function openChat(id) {
+    planDeepLinkInteractionRef.current += 1
+    loadingPlanDeepLinkRef.current = null
+    if (deepLinkConnectionId && deepLinkPlanId) {
+      handledPlanDeepLinkRef.current = `${deepLinkConnectionId}:${deepLinkPlanId}:${location.key}`
+    }
     lastChatTriggerRef.current = document.activeElement
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur()
@@ -975,13 +1163,22 @@ export default function Matches() {
     activeChatIdRef.current = id
     setChatId(id)
     setDraft('')
+    setLinkedPlan(null)
+    setLinkedPlanConnectionId(null)
     void markConversationRead(id)
   }
 
   function closeChat() {
+    planDeepLinkInteractionRef.current += 1
+    loadingPlanDeepLinkRef.current = null
+    if (deepLinkConnectionId && deepLinkPlanId) {
+      handledPlanDeepLinkRef.current = `${deepLinkConnectionId}:${deepLinkPlanId}:${location.key}`
+    }
     activeChatIdRef.current = null
     setChatId(null)
     setDraft('')
+    setLinkedPlan(null)
+    setLinkedPlanConnectionId(null)
     planDialogConnectionIdRef.current = null
     setPlanDialogConnectionId(null)
     lastChatTriggerRef.current?.focus({ preventScroll: true })
@@ -1301,16 +1498,24 @@ export default function Matches() {
                 </header>
 
                 <CocoPlanCard
-                  plan={chat.plan}
+                  plan={displayedPlan}
                   connectionName={chat.name}
                   headingRef={planPanelHeadingRef}
+                  hasNewerActivePlan={hasNewerActivePlan}
                   pendingStatus={
-                    planAction && planAction.id === chat.plan?.id
+                    planAction && planAction.id === displayedPlan?.id
                       ? planAction.status
                       : null
                   }
                   onCreate={() => openPlanDialog(chat.id)}
-                  onUpdateStatus={(status) => requestPlanStatus(chat.plan, status)}
+                  onShowCurrent={() => {
+                    setLinkedPlan(null)
+                    setLinkedPlanConnectionId(null)
+                    window.requestAnimationFrame(() => {
+                      planPanelHeadingRef.current?.focus({ preventScroll: true })
+                    })
+                  }}
+                  onUpdateStatus={(status) => requestPlanStatus(displayedPlan, status)}
                 />
 
                 <div

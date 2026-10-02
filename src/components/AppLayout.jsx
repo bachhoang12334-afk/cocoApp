@@ -2,6 +2,10 @@ import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getCurrentAccount, logoutAccount } from '../auth'
 import { useConnectionRequestRefresh } from '../hooks/useConnectionRequestRefresh'
+import {
+  getNotificationTarget,
+  isCocoPlanNotification,
+} from '../lib/notificationNavigation'
 import { normalizeNotifications } from '../lib/profileAccess'
 import { supabase } from '../lib/supabaseClient'
 
@@ -11,6 +15,11 @@ const notificationCopy = {
   request_declined: 'đã từ chối lời mời kết nối của cậu.',
   request_cancelled: 'đã hủy lời mời kết nối đã gửi cho cậu.',
   connection_disconnected: 'đã ngắt kết nối với cậu.',
+  plan_proposed: 'đã gửi một Coco Plan mới.',
+  plan_accepted: 'đã chấp nhận Coco Plan.',
+  plan_declined: 'đã từ chối Coco Plan.',
+  plan_cancelled: 'đã hủy Coco Plan.',
+  plan_completed: 'đã đánh dấu Coco Plan hoàn thành.',
 }
 
 function getNotificationMessage(notification) {
@@ -223,7 +232,22 @@ export default function AppLayout({ children }) {
 
   useEffect(() => {
     let cancelled = false
+    let initialNotificationsLoaded = false
+    let notificationsSubscribed = false
+    let notificationCatchUpStarted = false
     notificationsMountedRef.current = true
+
+    function catchUpNotifications() {
+      if (
+        cancelled
+        || !initialNotificationsLoaded
+        || !notificationsSubscribed
+        || notificationCatchUpStarted
+      ) return
+
+      notificationCatchUpStarted = true
+      void loadNotifications({ silent: true })
+    }
 
     async function setupNotifications() {
       try {
@@ -232,13 +256,6 @@ export default function AppLayout({ children }) {
 
         notificationUserIdRef.current = user.id
         setProfileName(getAuthProfileName(user) || 'Sinh viên')
-        await Promise.all([
-          loadNotifications(),
-          loadUnreadMessageCount(),
-          loadProfileIdentity(),
-        ])
-        if (cancelled) return
-
         const channel = supabase
           .channel(`notifications:${user.id}`)
           .on(
@@ -270,12 +287,26 @@ export default function AppLayout({ children }) {
             }
           )
           .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+              notificationsSubscribed = true
+              catchUpNotifications()
+            }
+
             if (status === 'CHANNEL_ERROR' && notificationsMountedRef.current) {
               setNotificationsError('Kết nối thông báo trực tiếp đang gián đoạn. Dữ liệu sẽ tải lại khi cậu mở chuông.')
             }
           })
 
         notificationChannelRef.current = channel
+
+        await Promise.all([
+          loadNotifications(),
+          loadUnreadMessageCount(),
+          loadProfileIdentity(),
+        ])
+        initialNotificationsLoaded = true
+        catchUpNotifications()
+        if (cancelled) return
 
         const messageChannel = supabase
           .channel(`message-unread:${user.id}`)
@@ -390,6 +421,7 @@ export default function AppLayout({ children }) {
 
   async function markNotificationRead(notification) {
     setNotificationsOpen(false)
+    const target = getNotificationTarget(notification)
 
     if (notification.read_at === null) {
       const readAt = new Date().toISOString()
@@ -408,7 +440,7 @@ export default function AppLayout({ children }) {
       }
     }
 
-    navigate('/matches')
+    navigate(target)
   }
 
   async function markAllNotificationsRead() {
@@ -567,7 +599,7 @@ export default function AppLayout({ children }) {
                   id="notification-panel"
                   className="notification-panel"
                   role="dialog"
-                  aria-label="Thông báo kết nối"
+                  aria-label="Thông báo Coco"
                 >
                   <header className="notification-panel-header">
                     <div>
@@ -601,7 +633,7 @@ export default function AppLayout({ children }) {
                         onClick={() => markNotificationRead(notification)}
                       >
                         <span className="notification-item-icon" aria-hidden="true">
-                          <Icon name="connection" />
+                          <Icon name={isCocoPlanNotification(notification) ? 'spark' : 'connection'} />
                         </span>
                         <span className="notification-item-copy">
                           <strong>{getNotificationMessage(notification)}</strong>

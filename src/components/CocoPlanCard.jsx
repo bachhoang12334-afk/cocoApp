@@ -22,8 +22,10 @@ export default function CocoPlanCard({
   plan,
   connectionName,
   headingRef,
+  hasNewerActivePlan = false,
   pendingStatus,
   onCreate,
+  onShowCurrent,
   onUpdateStatus,
 }) {
   const [clockTick, setClockTick] = useState(0)
@@ -117,7 +119,14 @@ export default function CocoPlanCard({
             </div>
           )}
 
-          {isTerminal && (
+          {isTerminal && hasNewerActivePlan ? (
+            <div className="coco-plan-restart">
+              <span>Đây là kế hoạch cũ từ thông báo. Cuộc trò chuyện đã có một Coco Plan mới hơn.</span>
+              <button type="button" className="coco-plan-secondary" onClick={onShowCurrent}>
+                Xem kế hoạch hiện tại
+              </button>
+            </div>
+          ) : isTerminal && (
             <div className="coco-plan-restart">
               <span>Kế hoạch này đã khép lại. Hai cậu có thể bắt đầu một kế hoạch mới.</span>
               <button type="button" className="coco-plan-primary" onClick={onCreate}>

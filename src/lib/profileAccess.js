@@ -50,6 +50,7 @@ export function normalizeNotification(row) {
     recipient_id: row?.recipient_id,
     actor_id: row?.actor_id,
     connection_request_id: row?.connection_request_id,
+    connection_plan_id: row?.connection_plan_id,
     type: row?.type,
     read_at: row?.read_at,
     created_at: row?.created_at,

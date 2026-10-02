@@ -50,6 +50,9 @@ const connectionPlanHardeningMigration = await readFile(
   new URL('../supabase/migrations/20260917000013_harden_connection_plan_transitions.sql', import.meta.url),
   'utf8'
 )
+const effectiveConnectionPlanValidationFunction = connectionPlanHardeningMigration.match(
+  /create or replace function public\.validate_connection_plan\(\)[\s\S]*?\$\$;/
+)?.[0] || ''
 const discoverTrustFunction = trustMigration.match(
   /create function public\.get_discover_profiles\(\)[\s\S]*?\$\$;/
 )?.[0] || ''
@@ -238,34 +241,26 @@ test('Coco Plan RLS requires an accepted, unblocked participant relationship', (
 })
 
 test('Coco Plan details are immutable and clients can update only status', () => {
-  const validationFunction = connectionPlansMigration.match(
-    /create or replace function public\.validate_connection_plan\(\)[\s\S]*?\$\$;/
-  )?.[0] || ''
-
   assert.match(connectionPlansMigration, /grant update \(status\) on table public\.connection_plans/)
-  assert.match(validationFunction, /new\.connection_request_id is distinct from old\.connection_request_id/)
-  assert.match(validationFunction, /new\.proposer_id is distinct from old\.proposer_id/)
-  assert.match(validationFunction, /new\.title is distinct from old\.title/)
-  assert.match(validationFunction, /new\.starts_at is distinct from old\.starts_at/)
-  assert.match(validationFunction, /new\.mode is distinct from old\.mode/)
-  assert.match(validationFunction, /new\.location_note is distinct from old\.location_note/)
+  assert.match(effectiveConnectionPlanValidationFunction, /new\.connection_request_id is distinct from old\.connection_request_id/)
+  assert.match(effectiveConnectionPlanValidationFunction, /new\.proposer_id is distinct from old\.proposer_id/)
+  assert.match(effectiveConnectionPlanValidationFunction, /new\.title is distinct from old\.title/)
+  assert.match(effectiveConnectionPlanValidationFunction, /new\.starts_at is distinct from old\.starts_at/)
+  assert.match(effectiveConnectionPlanValidationFunction, /new\.mode is distinct from old\.mode/)
+  assert.match(effectiveConnectionPlanValidationFunction, /new\.location_note is distinct from old\.location_note/)
   assert.doesNotMatch(connectionPlansMigration, /grant[^;]*(?:delete|\ball\b)[^;]*on table public\.connection_plans/i)
   assert.doesNotMatch(connectionPlansMigration, /for delete/i)
 })
 
 test('Coco Plan transitions enforce ownership and terminal states', () => {
-  const validationFunction = connectionPlansMigration.match(
-    /create or replace function public\.validate_connection_plan\(\)[\s\S]*?\$\$;/
-  )?.[0] || ''
-
-  assert.match(validationFunction, /Only the other participant can accept or decline a plan/)
-  assert.match(validationFunction, /new\.status in \('accepted', 'declined'\)[\s\S]*actor_id = old\.proposer_id/)
-  assert.match(validationFunction, /Only the proposer can cancel a proposed plan/)
-  assert.match(validationFunction, /new\.status = 'cancelled'[\s\S]*actor_id <> old\.proposer_id/)
-  assert.match(validationFunction, /Accepted plans can only be completed or cancelled/)
-  assert.match(validationFunction, /old\.status = 'accepted'[\s\S]*new\.status not in \('cancelled', 'completed'\)/)
-  assert.match(validationFunction, /Completed, declined, or cancelled plans cannot change status/)
-  assert.match(validationFunction, /actor_id not in \(request_record\.requester_id, request_record\.recipient_id\)/)
+  assert.match(effectiveConnectionPlanValidationFunction, /Only the other participant can accept or decline a plan/)
+  assert.match(effectiveConnectionPlanValidationFunction, /new\.status in \('accepted', 'declined'\)[\s\S]*actor_id = old\.proposer_id/)
+  assert.match(effectiveConnectionPlanValidationFunction, /Only the proposer can cancel a proposed plan/)
+  assert.match(effectiveConnectionPlanValidationFunction, /new\.status = 'cancelled'[\s\S]*actor_id <> old\.proposer_id/)
+  assert.match(effectiveConnectionPlanValidationFunction, /Accepted plans can only be completed or cancelled/)
+  assert.match(effectiveConnectionPlanValidationFunction, /old\.status = 'accepted'[\s\S]*new\.status not in \('cancelled', 'completed'\)/)
+  assert.match(effectiveConnectionPlanValidationFunction, /Completed, declined, or cancelled plans cannot change status/)
+  assert.match(effectiveConnectionPlanValidationFunction, /actor_id not in \(request_record\.requester_id, request_record\.recipient_id\)/)
   assert.match(connectionPlansMigration, /before update of status on public\.connection_requests/)
   assert.match(connectionPlansMigration, /set status = 'cancelled'[\s\S]*status in \('proposed', 'accepted'\)/)
   assert.match(connectionPlansMigration, /cocoapp\.internal_plan_disconnect/)
@@ -278,16 +273,12 @@ test('Coco Plan realtime setup is idempotent and does not expose private profile
 })
 
 test('Coco Plan serializes plan writes with disconnects and rejects no-op updates', () => {
-  const validationFunction = connectionPlanHardeningMigration.match(
-    /create or replace function public\.validate_connection_plan\(\)[\s\S]*?\$\$;/
-  )?.[0] || ''
-
   assert.match(
-    validationFunction,
+    effectiveConnectionPlanValidationFunction,
     /if tg_op = 'INSERT' then[\s\S]*from public\.connection_requests as request[\s\S]*where request\.id = new\.connection_request_id[\s\S]*for update/
   )
   assert.match(
-    validationFunction,
+    effectiveConnectionPlanValidationFunction,
     /new\.status is not distinct from old\.status[\s\S]*Connection plan status must change/
   )
   assert.match(connectionPlanHardeningMigration, /security definer/)
