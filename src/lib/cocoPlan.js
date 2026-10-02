@@ -109,6 +109,17 @@ export function isCocoPlanExpired(plan, now = new Date()) {
     && startsAt <= referenceTime
 }
 
+export function canCompleteCocoPlan(plan, { now = new Date() } = {}) {
+  if (!plan || plan.status !== 'accepted') return false
+
+  const startsAt = Date.parse(plan.startsAt || '')
+  const referenceTime = new Date(now).getTime()
+
+  return !Number.isNaN(startsAt)
+    && !Number.isNaN(referenceTime)
+    && startsAt <= referenceTime
+}
+
 export function getCocoPlanActions(plan, { now = new Date() } = {}) {
   if (!plan) return []
 

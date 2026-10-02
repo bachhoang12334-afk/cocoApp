@@ -46,11 +46,14 @@ const connectionPlansMigration = await readFile(
   new URL('../supabase/migrations/20260917000012_create_connection_plans.sql', import.meta.url),
   'utf8'
 )
-const connectionPlanHardeningMigration = await readFile(
-  new URL('../supabase/migrations/20260917000013_harden_connection_plan_transitions.sql', import.meta.url),
+const reportAndPlanHardeningMigration = await readFile(
+  new URL('../supabase/migrations/20260917000015_harden_reports_and_plan_completion.sql', import.meta.url),
   'utf8'
 )
-const effectiveConnectionPlanValidationFunction = connectionPlanHardeningMigration.match(
+const effectiveUserReportValidationFunction = reportAndPlanHardeningMigration.match(
+  /create or replace function public\.validate_user_report\(\)[\s\S]*?\$\$;/
+)?.[0] || ''
+const effectiveConnectionPlanValidationFunction = reportAndPlanHardeningMigration.match(
   /create or replace function public\.validate_connection_plan\(\)[\s\S]*?\$\$;/
 )?.[0] || ''
 const discoverTrustFunction = trustMigration.match(
@@ -135,6 +138,64 @@ test('reports remain private and clients cannot edit or delete them', () => {
   assert.doesNotMatch(safetyMigration, /grant update(?:\s|\([^)]*\))*on table public\.user_reports/i)
   assert.doesNotMatch(safetyMigration, /grant delete on table public\.user_reports/i)
   assert.match(safetyMigration, /user_reports_open_context_idx/)
+})
+
+test('message reports bind the evidence sender to the reported user', () => {
+  assert.match(effectiveUserReportValidationFunction, /security definer/)
+  assert.match(effectiveUserReportValidationFunction, /set search_path = ''/)
+  assert.match(
+    effectiveUserReportValidationFunction,
+    /new\.reporter_id <> auth\.uid\(\)[\s\S]*Only the reporter can submit a safety report/
+  )
+  assert.match(
+    effectiveUserReportValidationFunction,
+    /new\.status <> 'submitted'[\s\S]*New safety reports must be submitted/
+  )
+  assert.match(
+    effectiveUserReportValidationFunction,
+    /new\.details := nullif\(btrim\(new\.details\), ''\)/
+  )
+  assert.match(
+    effectiveUserReportValidationFunction,
+    /message\.connection_request_id,[\s\S]*message\.sender_id[\s\S]*into[\s\S]*report_connection_id,[\s\S]*report_message_sender_id[\s\S]*where message\.id = new\.message_id/
+  )
+  assert.match(
+    effectiveUserReportValidationFunction,
+    /report_connection_id is null[\s\S]*Reported message was not found/
+  )
+  assert.match(
+    effectiveUserReportValidationFunction,
+    /new\.connection_request_id := report_connection_id[\s\S]*new\.connection_request_id <> report_connection_id[\s\S]*Reported message does not belong to this connection/
+  )
+  assert.match(
+    effectiveUserReportValidationFunction,
+    /auth\.uid\(\) not in \(request_record\.requester_id, request_record\.recipient_id\)[\s\S]*Reporter is not a participant in this connection/
+  )
+  assert.match(
+    effectiveUserReportValidationFunction,
+    /new\.reported_user_id not in \([\s\S]*request_record\.requester_id,[\s\S]*request_record\.recipient_id[\s\S]*new\.reported_user_id = auth\.uid\(\)[\s\S]*Reported user does not match this connection/
+  )
+  assert.match(
+    effectiveUserReportValidationFunction,
+    /from public\.profiles as profile[\s\S]*profile\.id = new\.reported_user_id[\s\S]*Reported user was not found/
+  )
+  assert.match(
+    effectiveUserReportValidationFunction,
+    /report_message_sender_id is distinct from new\.reported_user_id/
+  )
+  assert.match(
+    effectiveUserReportValidationFunction,
+    /Reported message was not sent by the reported user/
+  )
+  assert.ok(
+    effectiveUserReportValidationFunction.indexOf('Reporter is not a participant in this connection')
+      < effectiveUserReportValidationFunction.indexOf('report_message_sender_id is distinct from new.reported_user_id'),
+    'participant authorization must happen before sender identity validation'
+  )
+  assert.match(
+    reportAndPlanHardeningMigration,
+    /revoke all on function public\.validate_user_report\(\)\s+from public, anon, authenticated;/
+  )
 })
 
 test('profile trust signals are derived from Auth and protected from clients', () => {
@@ -266,6 +327,13 @@ test('Coco Plan transitions enforce ownership and terminal states', () => {
   assert.match(connectionPlansMigration, /cocoapp\.internal_plan_disconnect/)
 })
 
+test('accepted Coco Plans cannot be completed before their scheduled time', () => {
+  assert.match(
+    effectiveConnectionPlanValidationFunction,
+    /old\.status = 'accepted'[\s\S]*new\.status = 'completed' and old\.starts_at > now\(\)[\s\S]*cannot be completed before its scheduled time/
+  )
+})
+
 test('Coco Plan realtime setup is idempotent and does not expose private profiles', () => {
   assert.match(connectionPlansMigration, /pg_publication_tables/)
   assert.match(connectionPlansMigration, /alter publication supabase_realtime add table public\.connection_plans/)
@@ -273,18 +341,34 @@ test('Coco Plan realtime setup is idempotent and does not expose private profile
 })
 
 test('Coco Plan serializes plan writes with disconnects and rejects no-op updates', () => {
+  const parentLookupBlock = effectiveConnectionPlanValidationFunction.match(
+    /if tg_op = 'INSERT' then[\s\S]*?end if;\s+if request_record\.id is null/
+  )?.[0] || ''
+  const updateParentLookup = parentLookupBlock.match(
+    /else[\s\S]*?end if;/
+  )?.[0] || ''
+
   assert.match(
     effectiveConnectionPlanValidationFunction,
     /if tg_op = 'INSERT' then[\s\S]*from public\.connection_requests as request[\s\S]*where request\.id = new\.connection_request_id[\s\S]*for update/
+  )
+  assert.doesNotMatch(updateParentLookup, /for update/)
+  assert.match(
+    effectiveConnectionPlanValidationFunction,
+    /current_setting\('cocoapp\.internal_plan_disconnect', true\)[\s\S]*pg_trigger_depth\(\) > 1[\s\S]*old\.status in \('proposed', 'accepted'\)[\s\S]*new\.status = 'cancelled'/
+  )
+  assert.match(
+    effectiveConnectionPlanValidationFunction,
+    /actor_id is null and not is_disconnect_cancellation/
   )
   assert.match(
     effectiveConnectionPlanValidationFunction,
     /new\.status is not distinct from old\.status[\s\S]*Connection plan status must change/
   )
-  assert.match(connectionPlanHardeningMigration, /security definer/)
-  assert.match(connectionPlanHardeningMigration, /set search_path = ''/)
+  assert.match(effectiveConnectionPlanValidationFunction, /security definer/)
+  assert.match(effectiveConnectionPlanValidationFunction, /set search_path = ''/)
   assert.match(
-    connectionPlanHardeningMigration,
-    /revoke all on function public\.validate_connection_plan\(\) from public/
+    reportAndPlanHardeningMigration,
+    /revoke all on function public\.validate_connection_plan\(\)\s+from public, anon, authenticated;/
   )
 })

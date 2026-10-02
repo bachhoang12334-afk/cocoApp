@@ -5129,6 +5129,11 @@ textarea:focus-visible {
   opacity: .6;
 }
 
+.coco-plan-primary.is-time-locked:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
 .coco-plan-primary:focus-visible,
 .coco-plan-secondary:focus-visible,
 .coco-plan-dialog button:focus-visible,
@@ -5178,16 +5183,26 @@ textarea:focus-visible {
   grid-column: 1 / -1;
 }
 
-.coco-plan-expiry-note {
+.coco-plan-expiry-note,
+.coco-plan-completion-note {
   margin: 12px 0 0;
   padding: 9px 11px;
-  color: #705320;
-  border: 1px solid #ead7a6;
   border-radius: 8px;
-  background: #fff8df;
   font-size: 11px;
   font-weight: 720;
   line-height: 1.5;
+}
+
+.coco-plan-expiry-note {
+  color: #705320;
+  border: 1px solid #ead7a6;
+  background: #fff8df;
+}
+
+.coco-plan-completion-note {
+  color: var(--coco-primary-dark);
+  border: 1px solid #b8d9dc;
+  background: var(--coco-primary-soft);
 }
 
 .coco-plan-meta dt {

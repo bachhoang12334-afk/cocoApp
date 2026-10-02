@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
+  canCompleteCocoPlan,
   COCO_PLAN_MODES,
   COCO_PLAN_STATUSES,
   getCocoPlanActions,
@@ -30,12 +31,15 @@ export default function CocoPlanCard({
 }) {
   const [clockTick, setClockTick] = useState(0)
   const isExpired = isCocoPlanExpired(plan)
+  const canComplete = canCompleteCocoPlan(plan)
+  const completionIsLocked = plan?.status === 'accepted' && !canComplete
+  const completionNoteId = plan ? `coco-plan-completion-note-${plan.id}` : undefined
   const actions = getCocoPlanActions(plan)
   const isTerminal = plan && ['declined', 'cancelled', 'completed'].includes(plan.status)
   const displayStatus = isExpired ? 'expired' : plan?.status
 
   useEffect(() => {
-    if (!plan || plan.status !== 'proposed') return undefined
+    if (!plan || !['proposed', 'accepted'].includes(plan.status)) return undefined
 
     const startsAt = Date.parse(plan.startsAt || '')
     const remaining = startsAt - Date.now()
@@ -100,22 +104,36 @@ export default function CocoPlanCard({
             </p>
           )}
 
+          {completionIsLocked && (
+            <p id={completionNoteId} className="coco-plan-completion-note">
+              Chưa thể đánh dấu hoàn thành. Kế hoạch bắt đầu lúc{' '}
+              <time dateTime={plan.startsAt}>{dateFormatter.format(new Date(plan.startsAt))}</time>;
+              nút hoàn thành sẽ tự mở sau thời điểm này.
+            </p>
+          )}
+
           {actions.length > 0 && (
             <div className="coco-plan-actions" aria-label="Hành động với Coco Plan">
-              {actions.map((status) => (
-                <button
-                  key={status}
-                  type="button"
-                  className={status === 'accepted' || status === 'completed'
-                    ? 'coco-plan-primary'
-                    : 'coco-plan-secondary'}
-                  disabled={Boolean(pendingStatus)}
-                  aria-busy={pendingStatus === status}
-                  onClick={() => onUpdateStatus(status)}
-                >
-                  {pendingStatus === status ? 'Đang cập nhật…' : actionLabels[status]}
-                </button>
-              ))}
+              {actions.map((status) => {
+                const isCompletionLocked = status === 'completed' && completionIsLocked
+                const buttonClass = status === 'accepted' || status === 'completed'
+                  ? 'coco-plan-primary'
+                  : 'coco-plan-secondary'
+
+                return (
+                  <button
+                    key={status}
+                    type="button"
+                    className={`${buttonClass}${isCompletionLocked ? ' is-time-locked' : ''}`}
+                    disabled={Boolean(pendingStatus) || isCompletionLocked}
+                    aria-busy={pendingStatus === status}
+                    aria-describedby={isCompletionLocked ? completionNoteId : undefined}
+                    onClick={() => onUpdateStatus(status)}
+                  >
+                    {pendingStatus === status ? 'Đang cập nhật…' : actionLabels[status]}
+                  </button>
+                )
+              })}
             </div>
           )}
 

@@ -21,6 +21,7 @@ import CocoPlanCard from '../components/CocoPlanCard'
 import CocoPlanDialog from '../components/CocoPlanDialog'
 import {
   buildCocoPlanInsert,
+  canCompleteCocoPlan,
   EMPTY_COCO_PLAN_DRAFT,
   getCocoPlanDraftErrors,
   getDefaultCocoPlanStartAt,
@@ -1032,8 +1033,17 @@ export default function Matches() {
     }
   }
 
-  async function updatePlanStatus(planId, status) {
+  async function updatePlanStatus(planId, status, plan = null) {
     if (planAction) return
+
+    if (status === 'completed' && !canCompleteCocoPlan(plan)) {
+      setStatusMessage('')
+      setError('Chưa thể đánh dấu hoàn thành trước thời gian bắt đầu của Coco Plan.')
+      window.requestAnimationFrame(() => {
+        planPanelHeadingRef.current?.focus({ preventScroll: true })
+      })
+      return
+    }
 
     const userId = messageUserIdRef.current
     if (!userId) return
@@ -1090,7 +1100,7 @@ export default function Matches() {
 
   function requestPlanStatus(plan, status) {
     if (status !== 'cancelled') {
-      void updatePlanStatus(plan.id, status)
+      void updatePlanStatus(plan.id, status, plan)
       return
     }
 

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   buildCocoPlanInsert,
+  canCompleteCocoPlan,
   getDefaultCocoPlanStartAt,
   getCocoPlanActions,
   getCocoPlanDraftErrors,
@@ -123,6 +124,36 @@ test('returns only status transitions available to the current participant', () 
   for (const status of ['declined', 'cancelled', 'completed', 'unknown']) {
     assert.deepEqual(getCocoPlanActions({ status, isMine: false }), [])
   }
+})
+
+test('unlocks completion only after an accepted plan reaches its start time', () => {
+  const acceptedPlan = {
+    status: 'accepted',
+    startsAt: '2026-09-30T09:00:00.000Z',
+  }
+
+  assert.equal(canCompleteCocoPlan(acceptedPlan, {
+    now: new Date('2026-09-30T08:59:59.999Z'),
+  }), false)
+  assert.equal(canCompleteCocoPlan(acceptedPlan, {
+    now: new Date('2026-09-30T09:00:00.000Z'),
+  }), true)
+  assert.equal(canCompleteCocoPlan(acceptedPlan, {
+    now: new Date('2026-09-30T09:00:01.000Z'),
+  }), true)
+  assert.equal(canCompleteCocoPlan({
+    ...acceptedPlan,
+    status: 'proposed',
+  }, { now: new Date('2026-09-30T10:00:00.000Z') }), false)
+  assert.equal(canCompleteCocoPlan({
+    ...acceptedPlan,
+    startsAt: 'not-a-date',
+  }, { now: new Date('2026-09-30T10:00:00.000Z') }), false)
+
+  assert.deepEqual(
+    getCocoPlanActions(acceptedPlan, { now: fixedNow }),
+    ['completed', 'cancelled']
+  )
 })
 
 test('marks past proposals as expired and never offers an impossible acceptance', () => {
