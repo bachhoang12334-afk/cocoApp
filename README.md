@@ -5,7 +5,7 @@ CocoApp là nền tảng kết nối sinh viên theo nhu cầu thực tế: họ
 ## Chức năng hiện có
 
 - Đăng ký, đăng nhập và hồ sơ đồng bộ với Supabase.
-- Khám phá sinh viên theo mục tiêu, khu vực và thông tin công khai.
+- Khám phá sinh viên theo mục tiêu và phạm vi khu vực gần đúng, không thu GPS.
 - Gửi, chấp nhận, từ chối, hủy và ngắt kết nối.
 - Thông báo Realtime với trạng thái đã đọc.
 - Tin nhắn Realtime, lịch sử, phân trang và số tin chưa đọc.
@@ -45,6 +45,7 @@ Chạy migrations theo đúng thứ tự trong `supabase/migrations`:
 15. `20260917000014_add_coco_plan_notifications.sql`
 16. `20260917000015_harden_reports_and_plan_completion.sql`
 17. `20260917000016_harden_connection_request_privileges.sql`
+18. `20260917000017_add_private_proximity_scope.sql`
 
 Không chỉnh sửa migration đã chạy. Mọi thay đổi schema tiếp theo phải nằm trong migration mới.
 

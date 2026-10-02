@@ -22,22 +22,19 @@ import {
   getPreferenceOption,
   normalizeAvailabilitySlots,
 } from '../lib/matchingPreferences'
+import {
+  getProximityLabel,
+  matchesProximityScope,
+  normalizeLocation as normalize,
+  normalizeProximityScope,
+  PROXIMITY_SCOPE_OPTIONS,
+} from '../lib/proximityMatching'
 
 const purposes = ['Tất cả', 'Học nhóm', 'Team Project', 'Ghép trọ']
 const purposeValues = {
   'Học nhóm': 'study_group',
   'Team Project': 'team_project',
   'Ghép trọ': 'roommates',
-}
-
-function normalize(value) {
-  return String(value ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[đĐ]/g, 'd')
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, ' ')
 }
 
 function uniqueLocations(values) {
@@ -52,8 +49,16 @@ function uniqueLocations(values) {
   return [...result.values()]
 }
 
+function isSharedLocation(value) {
+  const normalized = normalize(value)
+  return normalized !== '' && !normalized.startsWith('chua cap nhat')
+}
+
 function locationText(student) {
-  return `${student.city} · ${student.area} · ${student.location}`
+  const parts = uniqueLocations([student.city, student.area])
+    .filter(isSharedLocation)
+
+  return parts.join(' · ') || 'Chưa chia sẻ khu vực gần đúng'
 }
 
 function stableNumericId(uuid) {
@@ -91,8 +96,6 @@ function mapProfileToStudent(profile) {
     purpose: profile.purpose?.trim() || 'Chưa chọn mục tiêu',
     city,
     area,
-    location: profile.public_location?.trim() || area,
-    distance: null,
     skills: profile.major?.trim() ? [major] : [],
     about: profile.bio?.trim() || 'Chưa có giới thiệu.',
     email_confirmed: profile.email_confirmed === true,
@@ -110,18 +113,20 @@ function mapProfileToStudent(profile) {
 }
 
 function mapProfilePreferences(profile) {
+  const city = profile?.city?.trim() || ''
+
   return {
     gender: profile?.gender?.trim() || '',
     major: profile?.major?.trim() || '',
     purpose: profile?.purpose?.trim() || '',
-    city: profile?.city?.trim() || '',
+    city,
     area: profile?.area?.trim() || '',
     availabilitySlots: normalizeAvailabilitySlots(profile?.availability_slots),
     collaborationStyle: profile?.collaboration_style?.trim() || '',
     commitmentLevel: profile?.commitment_level?.trim() || '',
-    maxDistance: ['1', '3', '5', '10'].includes(String(profile?.max_distance_km))
-      ? String(profile.max_distance_km)
-      : '5',
+    proximityScope: city
+      ? normalizeProximityScope(profile?.proximity_scope)
+      : 'anywhere',
   }
 }
 
@@ -169,7 +174,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
     availabilitySlots: [],
     collaborationStyle: '',
     commitmentLevel: '',
-    maxDistance: '5',
+    proximityScope: 'same_city',
   })
   const [students, setStudents] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -180,7 +185,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
   const [purpose, setPurpose] = useState(initialPurpose)
   const [city, setCity] = useState(profile.city || '')
   const [area, setArea] = useState(profile.area || '')
-  const [maxDistance, setMaxDistance] = useState('5')
+  const [proximityScope, setProximityScope] = useState('same_city')
   const [sortMode, setSortMode] = useState('fit')
   const [selectedId, setSelectedId] = useState(null)
   const [isFiltersOpen, setIsFiltersOpen] = useState(false)
@@ -220,7 +225,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
         const [ownResult, othersResult, requestResult] = await Promise.all([
           supabase
             .from('profiles')
-            .select('gender, major, purpose, city, area, max_distance_km, availability_slots, collaboration_style, commitment_level')
+            .select('gender, major, purpose, city, area, proximity_scope, availability_slots, collaboration_style, commitment_level')
             .eq('id', user.id)
             .maybeSingle(),
           supabase.rpc('get_discover_profiles'),
@@ -239,9 +244,9 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
         if (isMountedRef.current) {
           setProfile(preferences)
           if (resetPreferences) {
-            setCity(preferences.city)
-            setArea(preferences.area)
-            setMaxDistance(preferences.maxDistance)
+            setCity('')
+            setArea('')
+            setProximityScope(preferences.proximityScope)
           }
           setStudents((othersResult.data || []).map(mapProfileToStudent))
           setRequestStatuses(Object.fromEntries(
@@ -296,14 +301,15 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
     profile.city,
   ])
 
-  const areas = uniqueLocations([
-    ...students
-      .filter((student) => !city || normalize(student.city) === normalize(city))
-      .map((student) => student.area),
-    ...(!city || normalize(city) === normalize(profile.city)
-      ? [profile.area]
-      : []),
-  ])
+  const hasManualLocationFilter = Boolean(city)
+  const areas = city
+    ? uniqueLocations([
+        ...students
+          .filter((student) => normalize(student.city) === normalize(city))
+          .map((student) => student.area),
+        ...(normalize(city) === normalize(profile.city) ? [profile.area] : []),
+      ]).filter(isSharedLocation)
+    : []
 
   const filteredStudents = students.filter((student) => {
     const searchableText = normalize([
@@ -311,7 +317,6 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
       student.major,
       student.city,
       student.area,
-      student.location,
       ...student.skills,
     ].join(' '))
 
@@ -323,9 +328,9 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
     return (
       searchableText.includes(normalize(deferredSearch)) &&
       (purpose === 'Tất cả' || student.purpose === purpose) &&
+      (hasManualLocationFilter || matchesProximityScope(profile, student, proximityScope)) &&
       (!city || normalize(student.city) === normalize(city)) &&
       (!area || normalize(student.area) === normalize(area)) &&
-      (student.distance === null || student.distance <= Number(maxDistance)) &&
       genderMatches &&
       !hiddenIds.includes(student.id)
     )
@@ -473,7 +478,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
     setPurpose('Tất cả')
     setCity('')
     setArea('')
-    setMaxDistance('10')
+    setProximityScope(profile.proximityScope)
     setHiddenIds([])
     setUndoStudent(null)
     closeProfile(false)
@@ -505,9 +510,8 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
         </header>
 
         <p className="discover-demo-note">
-          Hồ sơ sinh viên được tải từ Supabase.
-          Khoảng cách sẽ được bổ sung khi có dữ liệu vị trí phù hợp.
-          Lời mời được lưu trên Supabase.
+          Coco so khớp theo tỉnh/thành phố và khu vực gần đúng đã chia sẻ.
+          Không thu GPS, không đọc trường địa chỉ chính xác và không giả lập số km.
         </p>
 
         <div className="discover-trust-bar">
@@ -601,12 +605,15 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
               <span>Khu vực</span>
               <select
                 value={area}
+                disabled={!city}
                 onChange={(event) => {
                   setArea(event.target.value)
                   setSelectedId(null)
                 }}
               >
-                <option value="">Tất cả khu vực</option>
+                <option value="">
+                  {city ? 'Tất cả khu vực' : 'Chọn tỉnh / thành phố trước'}
+                </option>
                 {areas.map((item) => (
                   <option key={normalize(item)} value={item}>
                     {item}
@@ -616,16 +623,30 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
             </label>
 
             <label className="discover-filter-field">
-              <span>Khoảng cách tối đa — số liệu mẫu</span>
+              <span>Phạm vi khu vực</span>
               <select
-                value={maxDistance}
-                onChange={(event) => setMaxDistance(event.target.value)}
+                value={proximityScope}
+                onChange={(event) => {
+                  setProximityScope(event.target.value)
+                  setCity('')
+                  setArea('')
+                  setSelectedId(null)
+                }}
+                aria-describedby="proximity-filter-hint"
               >
-                <option value="1">1 km</option>
-                <option value="3">3 km</option>
-                <option value="5">5 km</option>
-                <option value="10">10 km</option>
+                {PROXIMITY_SCOPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
               </select>
+              <small
+                id="proximity-filter-hint"
+                className="discover-filter-hint"
+                aria-live="polite"
+              >
+                {city
+                  ? `Đang lọc thủ công tại ${city}; xóa tỉnh/thành phố để dùng lại phạm vi này.`
+                  : 'Mặc định từ Hồ sơ; hồ sơ thiếu dữ liệu cần thiết sẽ không thuộc phạm vi gần.'}
+              </small>
             </label>
 
             <div className="privacy-filter-note">
@@ -755,9 +776,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
                     <p className="student-location">
                       {locationText(student)}
                       <br />
-                      {student.distance === null
-                        ? 'Khoảng cách: Chưa có dữ liệu'
-                        : `Khoảng cách: ${student.distance.toLocaleString('vi-VN')} km`}
+                      {getProximityLabel(profile, student)}
                     </p>
 
                     <p className="student-about">{student.about}</p>
@@ -806,7 +825,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
                 <p>
                   {students.length === 0
                     ? 'Khi có thêm hồ sơ công khai, cậu sẽ thấy các kết nối phù hợp ở đây.'
-                    : 'Thử đổi địa điểm, tăng khoảng cách hoặc đặt lại bộ lọc.'}
+                    : 'Thử mở rộng phạm vi, đổi địa điểm hoặc đặt lại bộ lọc.'}
                 </p>
                 <button type="button" onClick={resetFilters}>
                   Đặt lại bộ lọc
@@ -881,7 +900,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
                 <div className="discover-dialog-section">
                   <span>Khu vực gần đúng</span>
                   <p>{locationText(selectedStudent)}</p>
-                  <small>Không hiển thị số nhà hoặc thông tin liên hệ cá nhân.</small>
+                  <small>{getProximityLabel(profile, selectedStudent)}. Không hiển thị số nhà hoặc thông tin liên hệ cá nhân.</small>
                 </div>
                 <div className="discover-dialog-section">
                   <span>Nhịp làm việc mong muốn</span>

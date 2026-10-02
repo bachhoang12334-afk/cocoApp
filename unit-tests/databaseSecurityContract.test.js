@@ -46,6 +46,10 @@ const profileAccessMigration = await readFile(
   new URL('../supabase/migrations/20260917000011_harden_profile_access.sql', import.meta.url),
   'utf8'
 )
+const proximityScopeMigration = await readFile(
+  new URL('../supabase/migrations/20260917000017_add_private_proximity_scope.sql', import.meta.url),
+  'utf8'
+)
 const connectionPlansMigration = await readFile(
   new URL('../supabase/migrations/20260917000012_create_connection_plans.sql', import.meta.url),
   'utf8'
@@ -65,6 +69,12 @@ const discoverTrustFunction = trustMigration.match(
 )?.[0] || ''
 const discoverPreferencesFunction = matchingPreferencesMigration.match(
   /create function public\.get_discover_profiles\(\)[\s\S]*?\$\$;/
+)?.[0] || ''
+const effectiveDiscoverFunction = proximityScopeMigration.match(
+  /create function public\.get_discover_profiles\(\)[\s\S]*?\$\$;/
+)?.[0] || ''
+const effectiveConnectionProfileFunction = proximityScopeMigration.match(
+  /create or replace function public\.get_my_connection_requests\(\)[\s\S]*?\$\$;/
 )?.[0] || ''
 
 test('connection schema permits reconnect only after the previous active row is closed', () => {
@@ -247,6 +257,32 @@ test('matching preferences stay broad, validated, and separate from private prof
   assert.match(matchingPreferencesMigration, /grant execute on function public\.get_discover_profiles\(\) to authenticated/)
 })
 
+test('proximity matching stays broad and does not expose precise location data', () => {
+  assert.match(proximityScopeMigration, /add column if not exists proximity_scope text not null default 'same_city'/)
+  assert.match(
+    proximityScopeMigration,
+    /check \(proximity_scope in \('same_area', 'same_city', 'anywhere'\)\)/
+  )
+  assert.match(effectiveDiscoverFunction, /security definer/)
+  assert.match(effectiveDiscoverFunction, /set search_path = ''/)
+  assert.match(effectiveDiscoverFunction, /auth\.uid\(\) is not null/)
+  assert.match(effectiveDiscoverFunction, /profile\.id <> auth\.uid\(\)/)
+  assert.match(effectiveDiscoverFunction, /block\.blocker_id = auth\.uid\(\) and block\.blocked_id = profile\.id/)
+  assert.match(effectiveDiscoverFunction, /block\.blocker_id = profile\.id and block\.blocked_id = auth\.uid\(\)/)
+  assert.doesNotMatch(
+    effectiveDiscoverFunction,
+    /public_location|profile_private|exact_address|latitude|longitude|coordinates?/i
+  )
+  assert.match(
+    proximityScopeMigration,
+    /revoke all on function public\.get_discover_profiles\(\)[\s\S]*from public, anon, authenticated;/
+  )
+  assert.match(
+    proximityScopeMigration,
+    /grant execute on function public\.get_discover_profiles\(\) to authenticated;/
+  )
+})
+
 test('direct profile reads are restricted to the authenticated user', () => {
   assert.match(
     profileAccessMigration,
@@ -265,18 +301,24 @@ test('direct profile reads are restricted to the authenticated user', () => {
 })
 
 test('connection profile reads require an active participant relationship and no block', () => {
-  const connectionFunction = profileAccessMigration.match(
-    /create or replace function public\.get_my_connection_requests\(\)[\s\S]*?\$\$;/
-  )?.[0] || ''
-
-  assert.match(connectionFunction, /security definer/)
-  assert.match(connectionFunction, /set search_path = ''/)
-  assert.match(connectionFunction, /auth\.uid\(\) in \(request\.requester_id, request\.recipient_id\)/)
-  assert.match(connectionFunction, /request\.status in \('pending', 'accepted'\)/)
-  assert.match(connectionFunction, /block\.blocker_id = other_profile\.id and block\.blocked_id = auth\.uid\(\)/)
-  assert.doesNotMatch(connectionFunction, /profile_private|university|study_year|exact_address|phone/i)
-  assert.match(profileAccessMigration, /revoke all on function public\.get_my_connection_requests\(\) from public, anon, authenticated/)
-  assert.match(profileAccessMigration, /grant execute on function public\.get_my_connection_requests\(\) to authenticated/)
+  assert.match(effectiveConnectionProfileFunction, /security definer/)
+  assert.match(effectiveConnectionProfileFunction, /set search_path = ''/)
+  assert.match(effectiveConnectionProfileFunction, /auth\.uid\(\) in \(request\.requester_id, request\.recipient_id\)/)
+  assert.match(effectiveConnectionProfileFunction, /request\.status in \('pending', 'accepted'\)/)
+  assert.match(effectiveConnectionProfileFunction, /block\.blocker_id = other_profile\.id and block\.blocked_id = auth\.uid\(\)/)
+  assert.doesNotMatch(effectiveConnectionProfileFunction, /profile_private|university|study_year|exact_address|phone/i)
+  assert.match(
+    effectiveConnectionProfileFunction,
+    /when request\.status = 'accepted' then other_profile\.public_location[\s\S]*else null/
+  )
+  assert.match(
+    proximityScopeMigration,
+    /revoke all on function public\.get_my_connection_requests\(\)[\s\S]*from public, anon, authenticated;/
+  )
+  assert.match(
+    proximityScopeMigration,
+    /grant execute on function public\.get_my_connection_requests\(\) to authenticated;/
+  )
 })
 
 test('notification actor names are recipient-scoped and hidden after either user blocks', () => {

@@ -26,7 +26,7 @@ const profileFields = [
   'city',
   'area',
   'public_location',
-  'max_distance_km',
+  'proximity_scope',
 ]
 
 const purposeLabels = {

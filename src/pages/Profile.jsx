@@ -12,6 +12,12 @@ import {
   getPreferenceOption,
   normalizeAvailabilitySlots,
 } from '../lib/matchingPreferences'
+import {
+  getProximityScopeOption,
+  normalizeProximityScope,
+  PROXIMITY_SCOPE_OPTIONS,
+} from '../lib/proximityMatching'
+import { VIETNAM_LOCATIONS } from '../data/vietnamLocations'
 
 const defaultProfile = {
   fullName: '',
@@ -24,7 +30,7 @@ const defaultProfile = {
   city: '',
   area: '',
   publicLocation: '',
-  maxDistance: '3',
+  proximityScope: 'same_city',
   availabilitySlots: [],
   collaborationStyle: '',
   commitmentLevel: '',
@@ -34,7 +40,6 @@ const selectOptions = {
   studyYear: ['Năm 1', 'Năm 2', 'Năm 3', 'Năm 4', 'Khác'],
   gender: ['Nam', 'Nữ', 'Khác', 'Không muốn công khai'],
   purpose: ['Học nhóm', 'Team Project', 'Ghép trọ'],
-  maxDistance: ['1', '3', '5', '10'],
 }
 
 const requiredFields = [
@@ -46,7 +51,7 @@ const requiredFields = [
   'purpose',
   'city',
   'area',
-  'maxDistance',
+  'proximityScope',
 ]
 
 const fieldLabels = {
@@ -58,7 +63,7 @@ const fieldLabels = {
   purpose: 'Mục tiêu kết nối',
   city: 'Tỉnh / Thành phố',
   area: 'Khu vực trong tỉnh / thành phố',
-  maxDistance: 'Khoảng cách mong muốn',
+  proximityScope: 'Phạm vi tìm kiếm',
 }
 
 function profileFromSupabase(profile) {
@@ -75,7 +80,7 @@ function profileFromSupabase(profile) {
     city: profile.city || '',
     area: profile.area || '',
     publicLocation: profile.public_location || '',
-    maxDistance: String(profile.max_distance_km || 3),
+    proximityScope: normalizeProximityScope(profile.proximity_scope),
     availabilitySlots: normalizeAvailabilitySlots(profile.availability_slots),
     collaborationStyle: profile.collaboration_style || '',
     commitmentLevel: profile.commitment_level || '',
@@ -153,7 +158,7 @@ export default function Profile() {
       const [{ data: publicProfile, error: publicError }, { data: privateData, error: privateError }] = await Promise.all([
         supabase
           .from('profiles')
-          .select('id, full_name, university, major, study_year, gender, purpose, bio, city, area, public_location, max_distance_km, availability_slots, collaboration_style, commitment_level, email_confirmed, education_email, verification_status')
+          .select('id, full_name, university, major, study_year, gender, purpose, bio, city, area, public_location, proximity_scope, availability_slots, collaboration_style, commitment_level, email_confirmed, education_email, verification_status')
           .eq('id', user.id)
           .maybeSingle(),
         supabase
@@ -359,12 +364,12 @@ export default function Profile() {
           city: cleaned.city,
           area: cleaned.area,
           public_location: cleaned.publicLocation,
-          max_distance_km: Number(cleaned.maxDistance),
+          proximity_scope: normalizeProximityScope(cleaned.proximityScope),
           availability_slots: cleaned.availabilitySlots,
           collaboration_style: cleaned.collaborationStyle,
           commitment_level: cleaned.commitmentLevel,
         })
-        .select('id, full_name, university, major, study_year, gender, purpose, bio, city, area, public_location, max_distance_km, availability_slots, collaboration_style, commitment_level, email_confirmed, education_email, verification_status')
+        .select('id, full_name, university, major, study_year, gender, purpose, bio, city, area, public_location, proximity_scope, availability_slots, collaboration_style, commitment_level, email_confirmed, education_email, verification_status')
         .single()
 
       if (publicError) throw publicError
@@ -426,9 +431,7 @@ export default function Profile() {
 
           {selectOptions[name].map((option) => (
             <option key={option} value={option}>
-              {name === 'maxDistance'
-                ? `Trong vòng ${option} km`
-                : option}
+              {option}
             </option>
           ))}
         </select>
@@ -450,6 +453,39 @@ export default function Profile() {
         {formData[name] && (
           <small className="profile-field-hint">
             {getPreferenceOption(options, formData[name])?.description}
+          </small>
+        )}
+      </label>
+    )
+  }
+
+  function renderProximityScopeSelect() {
+    const option = getProximityScopeOption(formData.proximityScope)
+
+    return (
+      <label className="profile-field">
+        {fieldLabel('proximityScope', 'Phạm vi tìm kiếm')}
+        <select
+          id="profile-proximityScope"
+          name="proximityScope"
+          value={formData.proximityScope}
+          onChange={handleChange}
+          onBlur={handleBlur}
+          aria-invalid={Boolean(fieldErrors.proximityScope)}
+          aria-describedby={fieldErrors.proximityScope
+            ? 'proximity-scope-hint proximity-scope-error'
+            : 'proximity-scope-hint'}
+        >
+          {PROXIMITY_SCOPE_OPTIONS.map((item) => (
+            <option key={item.value} value={item.value}>{item.label}</option>
+          ))}
+        </select>
+        <small id="proximity-scope-hint" className="profile-field-hint">
+          {option?.description}
+        </small>
+        {fieldErrors.proximityScope && (
+          <small id="proximity-scope-error" className="profile-field-error">
+            {fieldErrors.proximityScope}
           </small>
         )}
       </label>
@@ -776,6 +812,7 @@ export default function Profile() {
                   <input
                     id="profile-city"
                     name="city"
+                    list="profile-city-options"
                     value={formData.city}
                     onChange={handleChange}
                     onBlur={handleBlur}
@@ -784,6 +821,11 @@ export default function Profile() {
                     placeholder="Ví dụ: Hà Nội"
                     maxLength={80}
                   />
+                  <datalist id="profile-city-options">
+                    {VIETNAM_LOCATIONS.map((location) => (
+                      <option key={location} value={location} />
+                    ))}
+                  </datalist>
                   {fieldErrors.city && <small id="city-error" className="profile-field-error">{fieldErrors.city}</small>}
                 </label>
 
@@ -796,10 +838,13 @@ export default function Profile() {
                     onChange={handleChange}
                     onBlur={handleBlur}
                     aria-invalid={Boolean(fieldErrors.area)}
-                    aria-describedby={fieldErrors.area ? 'area-error' : undefined}
-                    placeholder="Ví dụ: Cầu Giấy, Thanh Xuân"
+                    aria-describedby={fieldErrors.area ? 'area-hint area-error' : 'area-hint'}
+                    placeholder="Ví dụ: Cầu Giấy"
                     maxLength={100}
                   />
+                  <small id="area-hint" className="profile-field-hint">
+                    Chỉ nhập một quận, huyện hoặc khu vực rộng; không nhập số nhà.
+                  </small>
                   {fieldErrors.area && <small id="area-error" className="profile-field-error">{fieldErrors.area}</small>}
                 </label>
 
@@ -811,9 +856,13 @@ export default function Profile() {
                     value={formData.publicLocation}
                     onChange={handleChange}
                     onBlur={handleBlur}
+                    aria-describedby="public-location-hint"
                     placeholder="Ví dụ: gần trường, tên đường"
                     maxLength={160}
                   />
+                  <small id="public-location-hint" className="profile-field-hint">
+                    Chỉ ghi địa danh rộng; không nhập số nhà, phòng trọ hoặc vị trí hiện tại.
+                  </small>
                 </label>
 
                 <label className="profile-field">
@@ -835,7 +884,15 @@ export default function Profile() {
                   {fieldErrors.phone && <small id="phone-error" className="profile-field-error">{fieldErrors.phone}</small>}
                 </label>
 
-                {renderSelect('maxDistance', 'Khoảng cách mong muốn')}
+                {renderProximityScopeSelect()}
+              </div>
+
+              <div className="profile-preference-note">
+                <Icon name="discover" />
+                <p>
+                  Coco chỉ so khớp tỉnh/thành phố và khu vực gần đúng. Ứng dụng
+                  không thu GPS hoặc đọc trường địa chỉ chính xác khi khám phá.
+                </p>
               </div>
 
               <div className="privacy-options">

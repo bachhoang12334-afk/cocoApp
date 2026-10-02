@@ -2057,6 +2057,18 @@ textarea:disabled {
   font-size: 13px;
 }
 
+.discover-filter-field select:disabled {
+  color: var(--coco-muted);
+  background: #f1f3f5;
+  opacity: .8;
+}
+
+.discover-filter-hint {
+  color: var(--coco-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .privacy-filter-note {
   margin-top: 20px;
   padding: 15px;
