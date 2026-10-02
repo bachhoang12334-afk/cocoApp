@@ -449,7 +449,6 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
           requester_id: user.id,
           recipient_id: student.profileId,
           purpose: purposeValues[student.purpose],
-          status: 'pending',
           intro_message: normalizeConnectionInvite(inviteMessage),
         })
 

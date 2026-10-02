@@ -44,6 +44,7 @@ Chạy migrations theo đúng thứ tự trong `supabase/migrations`:
 14. `20260917000013_harden_connection_plan_transitions.sql`
 15. `20260917000014_add_coco_plan_notifications.sql`
 16. `20260917000015_harden_reports_and_plan_completion.sql`
+17. `20260917000016_harden_connection_request_privileges.sql`
 
 Không chỉnh sửa migration đã chạy. Mọi thay đổi schema tiếp theo phải nằm trong migration mới.
 

@@ -6,6 +6,10 @@ const connectionSchema = await readFile(
   new URL('../supabase/migrations/20260917000001_create_connection_requests.sql', import.meta.url),
   'utf8'
 )
+const connectionPrivilegeHardeningMigration = await readFile(
+  new URL('../supabase/migrations/20260917000016_harden_connection_request_privileges.sql', import.meta.url),
+  'utf8'
+)
 const disconnectMigration = await readFile(
   new URL('../supabase/migrations/20260917000002_allow_connection_disconnect.sql', import.meta.url),
   'utf8'
@@ -76,6 +80,22 @@ test('connection schema permits reconnect only after the previous active row is 
     disconnectMigration,
     /Participants can disconnect accepted requests/
   )
+})
+
+test('connection request writes expose only the client-owned business fields', () => {
+  const privilegeStatements = connectionPrivilegeHardeningMigration
+    .replace(/--.*$/gm, '')
+    .split(';')
+    .map((statement) => statement.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+
+  assert.deepEqual(privilegeStatements, [
+    'revoke insert, update on table public.connection_requests from authenticated',
+    'revoke insert ( id, requester_id, recipient_id, purpose, status, created_at, updated_at, responded_at, intro_message ), update ( id, requester_id, recipient_id, purpose, status, created_at, updated_at, responded_at, intro_message ) on table public.connection_requests from authenticated',
+    'grant select on table public.connection_requests to authenticated',
+    'grant insert ( requester_id, recipient_id, purpose, intro_message ) on table public.connection_requests to authenticated',
+    'grant update (status) on table public.connection_requests to authenticated',
+  ])
 })
 
 test('connection invitation intros are required for new requests and immutable after sending', () => {
