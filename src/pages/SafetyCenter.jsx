@@ -16,15 +16,25 @@ function formatBlockedAt(value) {
 export default function SafetyCenter() {
   const [blockedUsers, setBlockedUsers] = useState([])
   const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [loadError, setLoadError] = useState('')
+  const [actionError, setActionError] = useState('')
   const [statusMessage, setStatusMessage] = useState('')
   const [pendingUnblock, setPendingUnblock] = useState(null)
   const [actionId, setActionId] = useState(null)
   const isMountedRef = useRef(false)
+  const loadRequestIdRef = useRef(0)
   const confirmationTriggerRef = useRef(null)
 
   const loadBlockedUsers = useCallback(async ({ silent = false } = {}) => {
-    if (!silent) setIsLoading(true)
+    const requestId = ++loadRequestIdRef.current
+    const isCurrentRequest = () => (
+      isMountedRef.current && loadRequestIdRef.current === requestId
+    )
+
+    if (!silent && isMountedRef.current) {
+      setIsLoading(true)
+      setLoadError('')
+    }
 
     try {
       const user = await getCurrentAccount()
@@ -33,16 +43,16 @@ export default function SafetyCenter() {
       const { data, error: loadError } = await supabase.rpc('get_my_blocked_users')
       if (loadError) throw loadError
 
-      if (isMountedRef.current) {
+      if (isCurrentRequest()) {
         setBlockedUsers(data || [])
-        setError('')
+        setLoadError('')
       }
     } catch {
-      if (isMountedRef.current) {
-        setError('Chưa tải được danh sách đã chặn. Hãy thử lại sau.')
+      if (isCurrentRequest()) {
+        setLoadError('Chưa tải được danh sách đã chặn. Hãy thử lại.')
       }
     } finally {
-      if (isMountedRef.current) setIsLoading(false)
+      if (isCurrentRequest()) setIsLoading(false)
     }
   }, [])
 
@@ -63,6 +73,7 @@ export default function SafetyCenter() {
 
     return () => {
       isMountedRef.current = false
+      loadRequestIdRef.current += 1
       window.cancelAnimationFrame(initialLoadFrame)
       window.removeEventListener('focus', handleFocus)
       document.removeEventListener('visibilitychange', handleFocus)
@@ -72,6 +83,7 @@ export default function SafetyCenter() {
   function askToUnblock(user) {
     confirmationTriggerRef.current = document.activeElement
     setPendingUnblock(user)
+    setActionError('')
     setStatusMessage('')
   }
 
@@ -85,8 +97,9 @@ export default function SafetyCenter() {
   async function unblockUser() {
     if (!pendingUnblock || actionId) return
 
-    setActionId(pendingUnblock.blocked_user_id)
-    setError('')
+    const blockedUser = pendingUnblock
+    setActionId(blockedUser.blocked_user_id)
+    setActionError('')
 
     try {
       const user = await getCurrentAccount()
@@ -96,20 +109,24 @@ export default function SafetyCenter() {
         .from('user_blocks')
         .delete()
         .eq('blocker_id', user.id)
-        .eq('blocked_id', pendingUnblock.blocked_user_id)
+        .eq('blocked_id', blockedUser.blocked_user_id)
 
       if (deleteError) throw deleteError
+      if (!isMountedRef.current) return
 
-      const unblockedName = pendingUnblock.full_name?.trim() || 'tài khoản này'
+      loadRequestIdRef.current += 1
+      const unblockedName = blockedUser.full_name?.trim() || 'tài khoản này'
       setBlockedUsers((current) => current.filter(
-        (item) => item.blocked_user_id !== pendingUnblock.blocked_user_id
+        (item) => item.blocked_user_id !== blockedUser.blocked_user_id
       ))
       setPendingUnblock(null)
       setStatusMessage(`Đã bỏ chặn ${unblockedName}. Hai bên cần gửi lời mời mới để kết nối lại.`)
     } catch {
-      setError('Chưa bỏ chặn được tài khoản. Hãy thử lại sau.')
+      if (isMountedRef.current) {
+        setActionError('Chưa bỏ chặn được tài khoản. Hãy thử lại sau.')
+      }
     } finally {
-      setActionId(null)
+      if (isMountedRef.current) setActionId(null)
     }
   }
 
@@ -145,25 +162,41 @@ export default function SafetyCenter() {
           <p>Rời khỏi tình huống, liên hệ người cậu tin tưởng và cơ quan hỗ trợ khẩn cấp tại nơi cậu đang ở. CocoApp không thay thế dịch vụ khẩn cấp.</p>
         </div>
 
-        {error && <div className="form-error-banner" role="alert">{error}</div>}
+        {actionError && <div className="form-error-banner" role="alert">{actionError}</div>}
         {statusMessage && (
           <div className="matches-status-message" role="status" aria-live="polite">
             <Icon name="safety" /> {statusMessage}
           </div>
         )}
 
-        <section className="blocked-users-section" aria-labelledby="blocked-users-title">
+        <section
+          className="blocked-users-section"
+          aria-labelledby="blocked-users-title"
+          aria-busy={isLoading}
+        >
           <div className="blocked-users-heading">
             <div>
               <p className="page-eyebrow">QUYỀN KIỂM SOÁT CỦA CẬU</p>
               <h2 id="blocked-users-title">Tài khoản đã chặn</h2>
               <p>Bỏ chặn không khôi phục kết nối cũ. Hai bên phải gửi và chấp nhận lời mời mới.</p>
             </div>
-            <span>{blockedUsers.length} tài khoản</span>
+            {!isLoading && !loadError && <span>{blockedUsers.length} tài khoản</span>}
           </div>
 
           {isLoading ? (
             <div className="safety-list-state" role="status">Đang tải danh sách đã chặn…</div>
+          ) : loadError ? (
+            <div className="safety-list-state" role="alert">
+              <strong>Không thể tải danh sách đã chặn</strong>
+              <p>{loadError}</p>
+              <button
+                type="button"
+                className="view-student-button"
+                onClick={() => void loadBlockedUsers()}
+              >
+                Thử tải lại
+              </button>
+            </div>
           ) : blockedUsers.length === 0 ? (
             <div className="safety-list-state">
               <strong>Chưa có tài khoản bị chặn</strong>

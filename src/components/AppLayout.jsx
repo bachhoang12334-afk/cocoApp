@@ -123,13 +123,18 @@ export default function AppLayout({ children }) {
   const messageUnreadChannelRef = useRef(null)
   const profileChannelRef = useRef(null)
   const notificationUserIdRef = useRef(null)
+  const notificationLoadIdRef = useRef(0)
+  const unreadMessageLoadIdRef = useRef(0)
+  const hasLoadedNotificationsRef = useRef(false)
   const pendingNotificationReadsRef = useRef(new Map())
   const notificationsMountedRef = useRef(false)
   const [logoutError, setLogoutError] = useState('')
   const [notifications, setNotifications] = useState([])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [notificationsLoading, setNotificationsLoading] = useState(true)
-  const [notificationsError, setNotificationsError] = useState('')
+  const [notificationsLoadError, setNotificationsLoadError] = useState('')
+  const [notificationActionFeedback, setNotificationActionFeedback] = useState('')
+  const [notificationTransportFeedback, setNotificationTransportFeedback] = useState('')
   const [notificationAnnouncement, setNotificationAnnouncement] = useState('')
   const [unreadMessageCount, setUnreadMessageCount] = useState(0)
   const [profileName, setProfileName] = useState('Sinh viên')
@@ -152,19 +157,25 @@ export default function AppLayout({ children }) {
   const loadNotifications = useCallback(async ({ silent = false } = {}) => {
     const userId = notificationUserIdRef.current
     if (!userId) return
+    const loadId = ++notificationLoadIdRef.current
+    const isCurrentLoad = () => (
+      notificationsMountedRef.current
+      && notificationUserIdRef.current === userId
+      && notificationLoadIdRef.current === loadId
+    )
 
     if (!silent && notificationsMountedRef.current) {
       setNotificationsLoading(true)
+      setNotificationsLoadError('')
     }
 
-    const { data, error } = await supabase
-      .rpc('get_my_notifications')
+    try {
+      const { data, error } = await supabase
+        .rpc('get_my_notifications')
 
-    if (!notificationsMountedRef.current) return
+      if (!isCurrentLoad()) return
+      if (error) throw error
 
-    if (error) {
-      setNotificationsError('Chưa tải được thông báo. Hãy thử mở lại chuông.')
-    } else {
       const normalizedNotifications = normalizeNotifications(data)
       const pendingReads = pendingNotificationReadsRef.current
 
@@ -185,40 +196,61 @@ export default function AppLayout({ children }) {
           return { ...notification, read_at: currentReadAt ?? pendingRead.readAt }
         })
       })
-      setNotificationsError('')
+      hasLoadedNotificationsRef.current = true
+      setNotificationsLoadError('')
+      setNotificationTransportFeedback('')
+    } catch {
+      if (isCurrentLoad()) {
+        if (hasLoadedNotificationsRef.current) {
+          setNotificationTransportFeedback('Chưa làm mới được thông báo. Danh sách gần nhất vẫn được giữ lại.')
+        } else {
+          setNotificationsLoadError('Chưa tải được thông báo. Hãy thử lại.')
+        }
+      }
+    } finally {
+      if (isCurrentLoad()) {
+        setNotificationsLoading(false)
+      }
     }
-
-    setNotificationsLoading(false)
   }, [])
 
   const loadUnreadMessageCount = useCallback(async () => {
     const userId = notificationUserIdRef.current
     if (!userId) return
+    const loadId = ++unreadMessageLoadIdRef.current
+    const isCurrentLoad = () => (
+      notificationsMountedRef.current
+      && notificationUserIdRef.current === userId
+      && unreadMessageLoadIdRef.current === loadId
+    )
 
-    const { data: acceptedRequests, error: requestsError } = await supabase
-      .from('connection_requests')
-      .select('id')
-      .eq('status', 'accepted')
-      .or(`requester_id.eq.${userId},recipient_id.eq.${userId}`)
+    try {
+      const { data: acceptedRequests, error: requestsError } = await supabase
+        .from('connection_requests')
+        .select('id')
+        .eq('status', 'accepted')
+        .or(`requester_id.eq.${userId},recipient_id.eq.${userId}`)
 
-    if (!notificationsMountedRef.current) return
-    if (requestsError) return
+      if (!isCurrentLoad() || requestsError) return
 
-    const requestIds = (acceptedRequests || []).map((request) => request.id)
-    if (requestIds.length === 0) {
-      setUnreadMessageCount(0)
-      return
-    }
+      const requestIds = (acceptedRequests || []).map((request) => request.id)
+      if (requestIds.length === 0) {
+        setUnreadMessageCount(0)
+        return
+      }
 
-    const { count, error } = await supabase
-      .from('messages')
-      .select('id', { count: 'exact', head: true })
-      .in('connection_request_id', requestIds)
-      .neq('sender_id', userId)
-      .is('read_at', null)
+      const { count, error } = await supabase
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .in('connection_request_id', requestIds)
+        .neq('sender_id', userId)
+        .is('read_at', null)
 
-    if (notificationsMountedRef.current && !error) {
-      setUnreadMessageCount(count || 0)
+      if (isCurrentLoad() && !error) {
+        setUnreadMessageCount(count || 0)
+      }
+    } catch {
+      // A later realtime event, focus event, or subscription catch-up retries this count.
     }
   }, [])
 
@@ -254,7 +286,6 @@ export default function AppLayout({ children }) {
     let cancelled = false
     let initialNotificationsLoaded = false
     let notificationsSubscribed = false
-    let notificationCatchUpStarted = false
     const pendingNotificationReads = pendingNotificationReadsRef.current
     notificationsMountedRef.current = true
 
@@ -263,10 +294,8 @@ export default function AppLayout({ children }) {
         cancelled
         || !initialNotificationsLoaded
         || !notificationsSubscribed
-        || notificationCatchUpStarted
       ) return
 
-      notificationCatchUpStarted = true
       void loadNotifications({ silent: true })
     }
 
@@ -276,6 +305,7 @@ export default function AppLayout({ children }) {
         if (!user || cancelled) return
 
         pendingNotificationReads.clear()
+        hasLoadedNotificationsRef.current = false
         notificationUserIdRef.current = user.id
         setProfileName(getAuthProfileName(user) || 'Sinh viên')
         const channel = supabase
@@ -289,6 +319,12 @@ export default function AppLayout({ children }) {
               filter: `recipient_id=eq.${user.id}`,
             },
             (payload) => {
+              if (
+                cancelled
+                || !notificationsMountedRef.current
+                || notificationUserIdRef.current !== user.id
+              ) return
+
               if (payload.eventType === 'INSERT') {
                 const incoming = { ...payload.new, actor: null }
                 setNotifications((current) => (
@@ -320,13 +356,14 @@ export default function AppLayout({ children }) {
             }
           )
           .subscribe((status) => {
-            if (status === 'SUBSCRIBED') {
+            if (status === 'SUBSCRIBED' && !cancelled && notificationsMountedRef.current) {
               notificationsSubscribed = true
+              setNotificationTransportFeedback('')
               catchUpNotifications()
             }
 
-            if (status === 'CHANNEL_ERROR' && notificationsMountedRef.current) {
-              setNotificationsError('Kết nối thông báo trực tiếp đang gián đoạn. Dữ liệu sẽ tải lại khi cậu mở chuông.')
+            if (status === 'CHANNEL_ERROR' && !cancelled && notificationsMountedRef.current) {
+              setNotificationTransportFeedback('Kết nối thông báo trực tiếp đang gián đoạn. Dữ liệu sẽ tải lại khi cậu mở chuông.')
             }
           })
 
@@ -347,10 +384,16 @@ export default function AppLayout({ children }) {
             'postgres_changes',
             { event: '*', schema: 'public', table: 'messages' },
             () => {
-              void loadUnreadMessageCount()
+              if (!cancelled && notificationsMountedRef.current) {
+                void loadUnreadMessageCount()
+              }
             }
           )
-          .subscribe()
+          .subscribe((status) => {
+            if (status === 'SUBSCRIBED' && !cancelled) {
+              void loadUnreadMessageCount()
+            }
+          })
 
         messageUnreadChannelRef.current = messageChannel
 
@@ -365,6 +408,7 @@ export default function AppLayout({ children }) {
               filter: `id=eq.${user.id}`,
             },
             (payload) => {
+              if (cancelled || !notificationsMountedRef.current) return
               const nextName = payload.new?.full_name?.trim()
               if (nextName) setProfileName(nextName)
             }
@@ -377,7 +421,7 @@ export default function AppLayout({ children }) {
       } catch {
         if (notificationsMountedRef.current) {
           setNotificationsLoading(false)
-          setNotificationsError('Chưa tải được thông báo. Hãy thử mở lại chuông.')
+          setNotificationsLoadError('Chưa tải được thông báo. Hãy thử lại.')
         }
       }
     }
@@ -401,6 +445,9 @@ export default function AppLayout({ children }) {
       cancelled = true
       notificationsMountedRef.current = false
       notificationUserIdRef.current = null
+      notificationLoadIdRef.current += 1
+      unreadMessageLoadIdRef.current += 1
+      hasLoadedNotificationsRef.current = false
       pendingNotificationReads.clear()
       window.removeEventListener('focus', handleWindowFocus)
       window.removeEventListener('cocoapp:profile-updated', handleProfileUpdated)
@@ -487,12 +534,13 @@ export default function AppLayout({ children }) {
     )))
 
     const errorMessage = 'Chưa đánh dấu được thông báo là đã đọc.'
-    setNotificationsError(errorMessage)
+    setNotificationActionFeedback(errorMessage)
     setNotificationAnnouncement(errorMessage)
   }
 
   function markNotificationRead(notification) {
     setNotificationsOpen(false)
+    setNotificationActionFeedback('')
     const target = getNotificationTarget(notification)
     const notificationId = notification.id
     const userId = notificationUserIdRef.current
@@ -525,20 +573,34 @@ export default function AppLayout({ children }) {
     if (!userId || unreadNotificationCount === 0) return
 
     const readAt = new Date().toISOString()
+    setNotificationActionFeedback('')
     setNotifications((current) => current.map((notification) => (
       notification.read_at === null
         ? { ...notification, read_at: readAt }
         : notification
     )))
 
-    const { error } = await supabase
-      .from('notifications')
-      .update({ read_at: readAt })
-      .eq('recipient_id', userId)
-      .is('read_at', null)
+    let updateFailed
 
-    if (error) {
-      setNotificationsError('Chưa đánh dấu được tất cả thông báo là đã đọc.')
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read_at: readAt })
+        .eq('recipient_id', userId)
+        .is('read_at', null)
+
+      updateFailed = Boolean(error)
+    } catch {
+      updateFailed = true
+    }
+
+    if (
+      !notificationsMountedRef.current
+      || notificationUserIdRef.current !== userId
+    ) return
+
+    if (updateFailed) {
+      setNotificationActionFeedback('Chưa đánh dấu được tất cả thông báo là đã đọc.')
       await loadNotifications({ silent: true })
     }
   }
@@ -695,13 +757,27 @@ export default function AppLayout({ children }) {
                     </button>
                   </header>
 
-                  {notificationsError && (
-                    <p className="notification-error" role="alert">{notificationsError}</p>
+                  {!notificationsLoadError && notificationTransportFeedback && (
+                    <p className="notification-error" role="alert">{notificationTransportFeedback}</p>
+                  )}
+                  {!notificationsLoadError && notificationActionFeedback && (
+                    <p className="notification-error" role="alert">{notificationActionFeedback}</p>
                   )}
 
-                  <div className="notification-list">
+                  <div className="notification-list" aria-busy={notificationsLoading}>
                     {notificationsLoading ? (
                       <p className="notification-empty" role="status">Đang tải thông báo…</p>
+                    ) : notificationsLoadError ? (
+                      <div className="notification-empty" role="alert">
+                        <p>{notificationsLoadError}</p>
+                        <button
+                          type="button"
+                          className="view-student-button"
+                          onClick={() => void loadNotifications()}
+                        >
+                          Thử tải lại
+                        </button>
+                      </div>
                     ) : notifications.length === 0 ? (
                       <p className="notification-empty">Chưa có thông báo mới.</p>
                     ) : notifications.map((notification) => (

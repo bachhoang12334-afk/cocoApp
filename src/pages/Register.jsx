@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
 import PasswordFlashlightInput from '../components/PasswordFlashlightInput'
-import { registerAccount } from '../auth'
+import { getCurrentAccount, registerAccount } from '../auth'
+import { getPostRegistrationNavigation } from '../lib/appNavigation'
 
-export default function Register() {
+export default function Register({ onAuthenticated }) {
   const navigate = useNavigate()
 
   const [form, setForm] = useState({
@@ -74,14 +75,25 @@ export default function Register() {
         password: form.password,
       })
 
-      navigate('/login', {
-        replace: true,
-        state: {
-          registered: true,
-          requiresEmailConfirmation: result.requiresEmailConfirmation,
-          email: form.email.trim().toLowerCase(),
-        },
+      let authenticatedAccount = null
+
+      if (!result.requiresEmailConfirmation) {
+        try {
+          authenticatedAccount = await getCurrentAccount()
+        } catch {
+          // Fall back to the existing sign-in path if the local session cannot be read.
+        }
+      }
+
+      if (authenticatedAccount) onAuthenticated?.(authenticatedAccount)
+
+      const navigation = getPostRegistrationNavigation({
+        requiresEmailConfirmation: result.requiresEmailConfirmation,
+        isAuthenticated: Boolean(authenticatedAccount),
+        email: form.email,
       })
+
+      navigate(navigation.to, navigation.options)
     } catch (error) {
       setError(
         error.message ||

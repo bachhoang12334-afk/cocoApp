@@ -9,6 +9,11 @@ import CocoCompass from '../components/CocoCompass'
 import DataRecoveryState from '../components/DataRecoveryState'
 import { normalizeConnectionRequests } from '../lib/profileAccess'
 import { getTrustSignal } from '../lib/trustSignals'
+import {
+  getDashboardConnectionTarget,
+  MATCHES_ACCEPTED_TARGET,
+  MATCHES_PENDING_TARGET,
+} from '../lib/appNavigation'
 
 const profileFields = [
   'full_name',
@@ -64,15 +69,15 @@ const quickActions = [
 ]
 
 function mapDashboardConnection(request, userId) {
-  const otherProfile = request.requester_id === userId
-    ? request.recipient
-    : request.requester
+  const isIncoming = request.recipient_id === userId
+  const otherProfile = isIncoming ? request.requester : request.recipient
 
   return {
     id: request.id,
     name: otherProfile?.full_name?.trim() || 'Sinh viên CocoApp',
     purpose: purposeLabels[request.purpose] || 'Kết nối sinh viên',
     status: request.status,
+    isIncoming,
   }
 }
 
@@ -247,7 +252,7 @@ export default function Dashboard() {
               <small>{completedFields}/{profileFields.length} thông tin</small>
             </article>
             <Link
-              to="/matches"
+              to={MATCHES_PENDING_TARGET}
               className="metric-card metric-orange metric-link"
               aria-label={`Mở kết nối, ${pending} lời mời đang chờ`}
             >
@@ -256,7 +261,7 @@ export default function Dashboard() {
               <small>Lời mời kết nối <Icon name="arrow" /></small>
             </Link>
             <Link
-              to="/matches"
+              to={MATCHES_ACCEPTED_TARGET}
               className="metric-card metric-green metric-link"
               aria-label={`Mở kết nối, ${accepted} kết nối đã chấp nhận`}
             >
@@ -326,7 +331,7 @@ export default function Dashboard() {
                 {recentConnections.map((item) => (
                   <Link
                     key={item.id}
-                    to="/matches"
+                    to={getDashboardConnectionTarget(item)}
                     className="connection-preview-item"
                   >
                     <span className="connection-mini-avatar">

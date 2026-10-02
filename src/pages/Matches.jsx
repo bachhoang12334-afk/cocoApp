@@ -16,6 +16,7 @@ import {
   parseCocoPlanDeepLink,
   parseConnectionNotificationDeepLink,
 } from '../lib/notificationNavigation'
+import { parseMatchesOverviewTarget } from '../lib/appNavigation'
 import { supabase } from '../lib/supabaseClient'
 import SafetyActions from '../components/SafetyActions'
 import TrustBadge from '../components/TrustBadge'
@@ -297,12 +298,13 @@ export default function Matches() {
   const connectionNotificationDeepLinkKey = connectionNotificationDeepLink
     ? `${connectionDeepLinkKind}:${connectionDeepLinkConnectionId || connectionDeepLinkNotificationType}:${location.key}`
     : null
+  const matchesOverviewTab = parseMatchesOverviewTarget(location.search)
   const [connections, setConnections] = useState([])
   const [error, setError] = useState('')
   const [loadError, setLoadError] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [actionId, setActionId] = useState(null)
-  const [tab, setTab] = useState('pending')
+  const [tab, setTab] = useState(matchesOverviewTab || 'pending')
   const [chatId, setChatId] = useState(null)
   const [draft, setDraft] = useState('')
   const [isSendingMessage, setIsSendingMessage] = useState(false)
@@ -374,6 +376,15 @@ export default function Matches() {
       lastChatTriggerRef.current?.focus({ preventScroll: true })
     }
   }, [])
+
+  useEffect(() => {
+    if (!matchesOverviewTab) return
+
+    invalidateDeepLinkNavigation()
+    clearChatState()
+    setTab(matchesOverviewTab)
+    setStatusMessage('')
+  }, [clearChatState, invalidateDeepLinkNavigation, location.key, matchesOverviewTab])
 
   const focusAfterConfirmation = useCallback(() => {
     window.requestAnimationFrame(() => {

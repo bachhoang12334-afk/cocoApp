@@ -10,6 +10,7 @@ import {
   getCurrentAccount,
   subscribeToAuthState,
 } from './auth'
+import { getGuestRouteRedirect } from './lib/appNavigation'
 import './App.css'
 import './ProductV2.css'
 
@@ -81,6 +82,21 @@ function RequireLogin({ children, account, isCheckingSession }) {
   )
 }
 
+function RequireGuest({ children, account, isCheckingSession }) {
+  if (isCheckingSession) return null
+
+  const redirect = getGuestRouteRedirect({
+    isAuthenticated: Boolean(account),
+    isCheckingSession,
+  })
+
+  if (redirect) {
+    return <Navigate to={redirect} replace />
+  }
+
+  return children
+}
+
 function protectedPage(page, account, isCheckingSession) {
   return (
     <RequireLogin
@@ -89,6 +105,17 @@ function protectedPage(page, account, isCheckingSession) {
     >
       {page}
     </RequireLogin>
+  )
+}
+
+function guestPage(page, account, isCheckingSession) {
+  return (
+    <RequireGuest
+      account={account}
+      isCheckingSession={isCheckingSession}
+    >
+      {page}
+    </RequireGuest>
   )
 }
 
@@ -139,8 +166,18 @@ export default function App() {
           element={<Navigate to="/dashboard" replace />}
         />
 
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
+        <Route
+          path="/login"
+          element={guestPage(<Login />, account, isCheckingSession)}
+        />
+        <Route
+          path="/register"
+          element={guestPage(
+            <Register onAuthenticated={setAccount} />,
+            account,
+            isCheckingSession
+          )}
+        />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
 
