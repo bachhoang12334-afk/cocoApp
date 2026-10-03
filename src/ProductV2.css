@@ -970,6 +970,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .profile-hero-actions { position: absolute; z-index: 3; right: 38px; bottom: 34px; display: flex; align-items: center; gap: 10px; }
 .profile-visibility { display: inline-flex; align-items: center; gap: 7px; padding: 9px 11px; color: rgba(255,255,255,.78); border: 1px solid rgba(255,255,255,.13); border-radius: 999px; background: rgba(255,255,255,.07); font-size: 9px; }
 .profile-visibility i { width: 7px; height: 7px; border-radius: 50%; background: var(--v2-mint); }
+.profile-visibility.is-paused i {
+  background: #ffbd69;
+  box-shadow: 0 0 0 4px rgba(255, 189, 105, .13);
+}
 .profile-hero .profile-save-button { margin: 0; color: #322d72; background: #fff; box-shadow: 0 12px 25px rgba(14,15,39,.2); }
 .profile-hero .profile-save-button:hover { color: #322d72; }
 .profile-hero-art { position: absolute; top: 28px; right: 80px; display: grid; place-items: center; width: 165px; height: 165px; border: 1px solid rgba(255,255,255,.14); border-radius: 50%; box-shadow: inset 0 0 0 24px rgba(255,255,255,.025); }
@@ -1788,6 +1792,98 @@ textarea:disabled {
   color: var(--coco-muted);
   font-size: 11px;
   line-height: 1.45;
+}
+
+.privacy-availability-option {
+  min-height: 76px;
+  border-color: #c8e6dd;
+  background: #f2fbf8;
+  cursor: pointer;
+  transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
+}
+
+.privacy-availability-option.is-paused {
+  border-color: #eadfc8;
+  background: #fffaf1;
+}
+
+.privacy-availability-option:hover {
+  border-color: #8dccc0;
+}
+
+.privacy-availability-option:focus-within {
+  border-color: var(--coco-primary);
+  box-shadow: 0 0 0 3px rgba(98, 91, 246, .16);
+}
+
+.profile-switch-control {
+  position: relative;
+  display: inline-flex;
+  min-width: 118px;
+  min-height: 48px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  flex: 0 0 auto;
+}
+
+.profile-switch-control > input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+}
+
+.profile-switch-control > span {
+  position: relative;
+  width: 48px;
+  height: 28px;
+  flex: 0 0 auto;
+  border: 1px solid #b8bfca;
+  border-radius: 999px;
+  background: #dfe3e8;
+  transition: border-color .16s ease, background-color .16s ease;
+}
+
+.profile-switch-control > span > i {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 7px rgba(32, 35, 49, .22);
+  transition: transform .16s ease;
+}
+
+.profile-switch-control > input:checked + span {
+  border-color: #1b9d7e;
+  background: #24aa89;
+}
+
+.profile-switch-control > input:checked + span > i {
+  transform: translateX(20px);
+}
+
+.profile-switch-control > em {
+  min-width: 47px;
+  color: var(--coco-ink);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  text-align: right;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .privacy-availability-option,
+  .profile-switch-control > span,
+  .profile-switch-control > span > i {
+    transition: none;
+  }
 }
 
 @media (max-width: 940px) {
@@ -5234,6 +5330,22 @@ textarea:focus-visible {
   grid-template-columns: auto minmax(0, 1fr) auto;
 }
 
+.discover-readiness-blocker.is-paused {
+  border-color: #eadfc8;
+  background:
+    radial-gradient(circle at 92% 12%, rgba(255, 189, 105, .16), transparent 28%),
+    linear-gradient(135deg, #fffaf1, #fff);
+}
+
+.discover-readiness-blocker.is-paused .discover-readiness-icon {
+  color: #9a6222;
+  background: #fff0d8;
+}
+
+.discover-readiness-blocker.is-paused p {
+  color: #8b5a1f;
+}
+
 .discover-readiness-icon {
   display: grid;
   width: 52px;
@@ -5265,6 +5377,16 @@ textarea:focus-visible {
   .profile-success-message {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .privacy-availability-option {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .profile-switch-control {
+    width: 100%;
+    justify-content: space-between;
   }
 }
 

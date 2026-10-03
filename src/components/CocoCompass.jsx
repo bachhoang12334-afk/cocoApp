@@ -6,6 +6,7 @@ function getJourneyState({
   completedRequired,
   requiredTotal,
   missingProfileFields,
+  acceptingConnections,
   emailConfirmed,
   accepted,
   pending,
@@ -33,7 +34,11 @@ function getJourneyState({
       id: 'connection',
       icon: 'connection',
       title: 'Kết nối đầu tiên',
-      detail: accepted > 0 ? `${accepted} kết nối đã chấp nhận` : 'Bắt đầu từ một mục tiêu thật cụ thể',
+      detail: accepted > 0
+        ? `${accepted} kết nối đã chấp nhận`
+        : acceptingConnections
+          ? 'Bắt đầu từ một mục tiêu thật cụ thể'
+          : 'Kết nối mới đang tạm dừng',
       done: accepted > 0,
       to: accepted > 0 ? '/matches' : '/discover',
     },
@@ -48,6 +53,16 @@ function getJourneyState({
         : 'Ưu tiên mục tiêu, kỹ năng và khu vực. Một hồ sơ rõ ràng giúp lời mời kết nối có lý do hơn.',
       action: 'Hoàn thiện hồ sơ',
       to: '/profile?welcome=1',
+    }
+  }
+
+  if (!acceptingConnections) {
+    return {
+      steps,
+      title: 'Cậu đang tạm dừng kết nối mới.',
+      description: 'Hồ sơ không xuất hiện trong Khám phá, nhưng mọi kết nối, Coco Plan và tin nhắn hiện có vẫn được giữ nguyên.',
+      action: 'Bật lại khi sẵn sàng',
+      to: '/profile#connection-availability',
     }
   }
 
@@ -95,6 +110,7 @@ export default function CocoCompass({
   completedRequired,
   requiredTotal,
   missingProfileFields,
+  acceptingConnections,
   emailConfirmed,
   accepted,
   pending,
@@ -104,6 +120,7 @@ export default function CocoCompass({
     completedRequired,
     requiredTotal,
     missingProfileFields,
+    acceptingConnections,
     emailConfirmed,
     accepted,
     pending,

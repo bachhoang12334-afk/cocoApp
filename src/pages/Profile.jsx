@@ -40,6 +40,7 @@ const defaultProfile = {
   availabilitySlots: [],
   collaborationStyle: '',
   commitmentLevel: '',
+  acceptingConnections: true,
 }
 
 const selectOptions = {
@@ -71,6 +72,7 @@ function profileFromSupabase(profile) {
     availabilitySlots: normalizeAvailabilitySlots(profile.availability_slots),
     collaborationStyle: profile.collaboration_style || '',
     commitmentLevel: profile.commitment_level || '',
+    acceptingConnections: profile.accepting_connections !== false,
   }
 }
 
@@ -108,6 +110,7 @@ export default function Profile() {
   const [isLoadingProfile, setIsLoadingProfile] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const statusRef = useRef(null)
+  const connectionAvailabilityRef = useRef(null)
   const profileMountedRef = useRef(false)
 
   const isDirty = JSON.stringify(formData) !== JSON.stringify(savedProfile) ||
@@ -145,7 +148,7 @@ export default function Profile() {
       const [{ data: publicProfile, error: publicError }, { data: privateData, error: privateError }] = await Promise.all([
         supabase
           .from('profiles')
-          .select('id, full_name, university, major, study_year, gender, purpose, bio, city, area, public_location, proximity_scope, availability_slots, collaboration_style, commitment_level, email_confirmed, education_email, verification_status')
+          .select('id, full_name, university, major, study_year, gender, purpose, bio, city, area, public_location, proximity_scope, availability_slots, collaboration_style, commitment_level, accepting_connections, email_confirmed, education_email, verification_status')
           .eq('id', user.id)
           .maybeSingle(),
         supabase
@@ -215,6 +218,23 @@ export default function Profile() {
       statusRef.current?.focus({ preventScroll: true })
     }
   }, [error])
+
+  useEffect(() => {
+    if (isLoadingProfile || location.hash !== '#connection-availability') return
+
+    const frame = window.requestAnimationFrame(() => {
+      const section = connectionAvailabilityRef.current
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+      section?.scrollIntoView({
+        behavior: reduceMotion ? 'auto' : 'smooth',
+        block: 'center',
+      })
+      section?.querySelector('input')?.focus({ preventScroll: true })
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [isLoadingProfile, location.hash])
 
   function validateForm(data) {
     const nextErrors = {}
@@ -301,7 +321,11 @@ export default function Profile() {
     const cleaned = Object.fromEntries(
       Object.entries(formData).map(([key, value]) => [
         key,
-        Array.isArray(value) ? normalizeAvailabilitySlots(value) : value.trim(),
+        Array.isArray(value)
+          ? normalizeAvailabilitySlots(value)
+          : typeof value === 'string'
+            ? value.trim()
+            : value,
       ])
     )
 
@@ -353,8 +377,9 @@ export default function Profile() {
           availability_slots: cleaned.availabilitySlots,
           collaboration_style: cleaned.collaborationStyle,
           commitment_level: cleaned.commitmentLevel,
+          accepting_connections: cleaned.acceptingConnections,
         })
-        .select('id, full_name, university, major, study_year, gender, purpose, bio, city, area, public_location, proximity_scope, availability_slots, collaboration_style, commitment_level, email_confirmed, education_email, verification_status')
+        .select('id, full_name, university, major, study_year, gender, purpose, bio, city, area, public_location, proximity_scope, availability_slots, collaboration_style, commitment_level, accepting_connections, email_confirmed, education_email, verification_status')
         .single()
 
       if (publicError) throw publicError
@@ -495,7 +520,11 @@ export default function Profile() {
           </div>
 
           <div className="profile-hero-actions">
-            <span className="profile-visibility"><i /> Chỉ hiển thị thông tin công khai</span>
+            <span className={`profile-visibility ${formData.acceptingConnections ? '' : 'is-paused'}`}>
+              <i /> {formData.acceptingConnections
+                ? 'Đang nhận kết nối mới'
+                : 'Đang tạm dừng kết nối mới'}
+            </span>
             <button
               type="submit"
               form="profile-form"
@@ -519,7 +548,10 @@ export default function Profile() {
             <div><span>Mức hoàn thiện</span><strong>{completion}%</strong></div>
             <div><span>Mục tiêu</span><strong>{formData.purpose || 'Chưa chọn'}</strong></div>
             <div><span>Khu vực</span><strong>{formData.area || formData.city || 'Chưa điền'}</strong></div>
-            <div><span>Quyền riêng tư</span><strong>Đang bảo vệ</strong></div>
+            <div>
+              <span>Khám phá</span>
+              <strong>{formData.acceptingConnections ? 'Đang hiển thị' : 'Đã tạm ẩn'}</strong>
+            </div>
           </div>
         )}
 
@@ -534,7 +566,9 @@ export default function Profile() {
                 {readiness.isReady
                   ? isDirty
                     ? 'Hồ sơ đã đủ thông tin — lưu để kích hoạt.'
-                    : 'Hồ sơ đã sẵn sàng để tìm đúng người.'
+                    : formData.acceptingConnections
+                      ? 'Hồ sơ đã sẵn sàng để tìm đúng người.'
+                      : 'Hồ sơ đủ thông tin nhưng đang tạm dừng kết nối mới.'
                   : `Còn ${readiness.missingFields.length} mục trước khi cậu có thể kết nối.`}
               </h2>
               <span>
@@ -571,6 +605,10 @@ export default function Profile() {
                 <button type="submit" form="profile-form" className="profile-readiness-action">
                   Lưu để sẵn sàng <Icon name="arrow" />
                 </button>
+              ) : !formData.acceptingConnections ? (
+                <a href="#connection-availability" className="profile-readiness-action">
+                  Bật lại kết nối mới <Icon name="arrow" />
+                </a>
               ) : (
                 <Link to={purposeDestination} className="profile-readiness-action">
                   Bắt đầu {formData.purpose.toLowerCase()} <Icon name="arrow" />
@@ -603,10 +641,16 @@ export default function Profile() {
 
         {saved && (
           <div className="profile-success-message" role="status" aria-live="polite">
-            <span>Đã lưu hồ sơ vào Supabase. Hồ sơ của cậu đã sẵn sàng kết nối.</span>
-            <Link to={purposeDestination}>
-              Tìm người cho {formData.purpose.toLowerCase()} <Icon name="arrow" />
-            </Link>
+            <span>
+              {formData.acceptingConnections
+                ? 'Đã lưu hồ sơ vào Supabase. Hồ sơ của cậu đang nhận kết nối mới.'
+                : 'Đã lưu. Hồ sơ được ẩn khỏi Khám phá; kết nối và tin nhắn hiện có vẫn giữ nguyên.'}
+            </span>
+            {formData.acceptingConnections && (
+              <Link to={purposeDestination}>
+                Tìm người cho {formData.purpose.toLowerCase()} <Icon name="arrow" />
+              </Link>
+            )}
           </div>
         )}
 
@@ -941,6 +985,39 @@ export default function Profile() {
               </div>
 
               <div className="privacy-options">
+                <label
+                  ref={connectionAvailabilityRef}
+                  id="connection-availability"
+                  className={`privacy-option privacy-availability-option ${formData.acceptingConnections ? 'is-active' : 'is-paused'}`}
+                >
+                  <div>
+                    <strong><Icon name="discover" /> Nhận kết nối mới</strong>
+                    <span id="connection-availability-description">
+                      {formData.acceptingConnections
+                        ? 'Hồ sơ đủ thông tin có thể xuất hiện trong Khám phá và gửi hoặc nhận lời mời mới.'
+                        : 'Hồ sơ bị ẩn khỏi Khám phá. Các kết nối, Coco Plan và tin nhắn hiện có không bị xóa.'}
+                    </span>
+                  </div>
+                  <span className="profile-switch-control">
+                    <input
+                      type="checkbox"
+                      name="acceptingConnections"
+                      checked={formData.acceptingConnections}
+                      onChange={(event) => {
+                        setFormData((current) => ({
+                          ...current,
+                          acceptingConnections: event.target.checked,
+                        }))
+                        setSaved(false)
+                        setError('')
+                      }}
+                      aria-describedby="connection-availability-description"
+                    />
+                    <span aria-hidden="true"><i /></span>
+                    <em>{formData.acceptingConnections ? 'Đang bật' : 'Đã tắt'}</em>
+                  </span>
+                </label>
+
                 <div className="privacy-option">
                   <div>
                       <strong><Icon name="profile" /> Không công khai số điện thoại</strong>

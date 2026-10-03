@@ -31,6 +31,7 @@ const dashboardProfileSelect = [
   'availability_slots',
   'collaboration_style',
   'commitment_level',
+  'accepting_connections',
   'email_confirmed',
   'education_email',
   'verification_status',
@@ -161,6 +162,8 @@ export default function Dashboard() {
 
   const profileReadiness = getProfileReadiness(profile)
   const completion = profileReadiness.completionPercent
+  const acceptingConnections = profile.accepting_connections !== false
+  const canStartConnections = profileReadiness.isReady && acceptingConnections
 
   const pending = connections.filter(
     (item) => item.status === 'pending'
@@ -227,10 +230,18 @@ export default function Dashboard() {
               </p>
 
               <Link
-                to={profileReadiness.isReady ? '/discover' : '/profile?welcome=1'}
+                to={canStartConnections
+                  ? '/discover'
+                  : profileReadiness.isReady
+                    ? '/profile#connection-availability'
+                    : '/profile?welcome=1'}
                 className="banner-button"
               >
-                {profileReadiness.isReady ? 'Khám phá ngay' : 'Hoàn thiện hồ sơ'}
+                {canStartConnections
+                  ? 'Khám phá ngay'
+                  : profileReadiness.isReady
+                    ? 'Bật lại kết nối mới'
+                    : 'Hoàn thiện hồ sơ'}
                 <Icon name="arrow" />
               </Link>
             </div>
@@ -265,6 +276,7 @@ export default function Dashboard() {
 
             <CocoCompass
               profileReady={profileReadiness.isReady}
+              acceptingConnections={acceptingConnections}
               completedRequired={profileReadiness.completedRequired}
               requiredTotal={profileReadiness.requiredTotal}
               missingProfileFields={profileReadiness.missingLabels}
@@ -285,11 +297,17 @@ export default function Dashboard() {
           {quickActions.map((action) => (
             <Link
               key={action.to}
-              to={profileReadiness.isReady ? action.to : '/profile?welcome=1'}
+              to={canStartConnections
+                ? action.to
+                : profileReadiness.isReady
+                  ? '/profile#connection-availability'
+                  : '/profile?welcome=1'}
               className={`quick-action-card ${action.color}`}
-              aria-label={profileReadiness.isReady
+              aria-label={canStartConnections
                 ? action.title
-                : `${action.title}: cần hoàn thiện hồ sơ trước`}
+                : profileReadiness.isReady
+                  ? `${action.title}: cần bật lại kết nối mới trước`
+                  : `${action.title}: cần hoàn thiện hồ sơ trước`}
             >
               <span className="quick-action-icon" aria-hidden="true">
                 <Icon name={action.icon} />
@@ -320,7 +338,9 @@ export default function Dashboard() {
                 <div>
                   <h3>Kết nối đầu tiên nên bắt đầu bằng một lý do rõ ràng.</h3>
                   <p>Chọn mục tiêu, xem hồ sơ và gửi lời mời cho người thật sự phù hợp.</p>
-                  <Link to="/discover">Khám phá có mục tiêu <Icon name="arrow" /></Link>
+                  <Link to={canStartConnections ? '/discover' : '/profile#connection-availability'}>
+                    {canStartConnections ? 'Khám phá có mục tiêu' : 'Kiểm tra trạng thái kết nối'} <Icon name="arrow" />
+                  </Link>
                 </div>
               </div>
             ) : (
@@ -377,7 +397,9 @@ export default function Dashboard() {
 
             <p>
               {profileReadiness.isReady
-                ? 'Đã đủ 9 thông tin bắt buộc để xuất hiện trong Khám phá.'
+                ? acceptingConnections
+                  ? 'Đã đủ 9 thông tin bắt buộc và đang xuất hiện trong Khám phá.'
+                  : 'Đã đủ 9 thông tin bắt buộc nhưng đang tạm ẩn khỏi Khám phá.'
                 : `Còn thiếu: ${profileReadiness.missingLabels.join(', ')}.`}
               {' '}Mức độ hoàn thiện không có nghĩa là tài khoản đã xác minh.
             </p>

@@ -715,7 +715,7 @@ export default function AppLayout({ children }) {
           </div>
 
           <div className="topbar-actions">
-            <span className="demo-status"><i /> Prototype</span>
+            <span className="demo-status"><i /> Beta an toàn</span>
             <div className="notification-menu" ref={notificationRootRef}>
               <button
                 ref={notificationButtonRef}

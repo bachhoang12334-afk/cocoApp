@@ -134,6 +134,7 @@ function mapProfilePreferences(profile) {
     availabilitySlots: normalizeAvailabilitySlots(profile?.availability_slots),
     collaborationStyle: profile?.collaboration_style?.trim() || '',
     commitmentLevel: profile?.commitment_level?.trim() || '',
+    acceptingConnections: profile?.accepting_connections !== false,
     proximityScope: city
       ? normalizeProximityScope(profile?.proximity_scope)
       : 'anywhere',
@@ -175,6 +176,10 @@ function getRequestErrorMessage(error) {
     return 'Một trong hai hồ sơ chưa đủ thông tin để kết nối. Hãy làm mới danh sách và thử lại.'
   }
 
+  if (message.includes('connection_requests_paused')) {
+    return 'Một trong hai tài khoản đang tạm dừng kết nối mới. Hãy làm mới danh sách.'
+  }
+
   return 'Chưa gửi được lời mời. Hãy thử lại sau.'
 }
 
@@ -191,6 +196,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
     availabilitySlots: [],
     collaborationStyle: '',
     commitmentLevel: '',
+    acceptingConnections: true,
     proximityScope: 'same_city',
   })
   const [students, setStudents] = useState([])
@@ -249,7 +255,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
         const [ownResult, othersResult, requestResult, savedResult] = await Promise.all([
           supabase
             .from('profiles')
-            .select('full_name, university, major, study_year, gender, purpose, city, area, proximity_scope, availability_slots, collaboration_style, commitment_level')
+            .select('full_name, university, major, study_year, gender, purpose, city, area, proximity_scope, availability_slots, collaboration_style, commitment_level, accepting_connections')
             .eq('id', user.id)
             .maybeSingle(),
           supabase.rpc('get_discover_profiles'),
@@ -331,6 +337,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
 
   const canFilterRoommates = ['Nam', 'Nữ', 'Khác'].includes(profile.gender)
   const profileReadiness = getProfileReadiness(profile)
+  const canDiscover = profileReadiness.isReady && profile.acceptingConnections
 
   const cities = uniqueLocations([
     ...VIETNAM_LOCATIONS,
@@ -629,7 +636,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
             <p>Tìm theo mục tiêu, kỹ năng và khu vực — không phải lướt ngẫu nhiên.</p>
           </div>
           <div className="discover-head-actions">
-            <span aria-live="polite"><strong>{profileReadiness.isReady ? filteredStudents.length : 0}</strong> kết quả phù hợp</span>
+            <span aria-live="polite"><strong>{canDiscover ? filteredStudents.length : 0}</strong> kết quả phù hợp</span>
             <Link to="/profile" className="secondary-action">Cập nhật tiêu chí</Link>
           </div>
         </header>
@@ -678,6 +685,22 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
           </section>
         )}
 
+        {!isLoading && !loadError && profileReadiness.isReady && !profile.acceptingConnections && (
+          <section className="discover-readiness-blocker is-paused" aria-labelledby="discover-paused-title">
+            <span className="discover-readiness-icon" aria-hidden="true"><Icon name="discover" /></span>
+            <div>
+              <p>ĐANG TẠM DỪNG KẾT NỐI MỚI</p>
+              <h2 id="discover-paused-title">Hồ sơ của cậu hiện không xuất hiện trong Khám phá.</h2>
+              <span>
+                Bật lại khi cậu sẵn sàng tìm người mới. Các kết nối, Coco Plan và tin nhắn hiện có vẫn được giữ nguyên.
+              </span>
+            </div>
+            <Link to="/profile#connection-availability">
+              Bật lại trong hồ sơ <Icon name="arrow" />
+            </Link>
+          </section>
+        )}
+
         {requestNotice && (
           <div className="matches-status-message" role="status" aria-live="polite">
             <Icon name="connection" /> {requestNotice}
@@ -714,7 +737,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
           </div>
         )}
 
-        {profileReadiness.isReady && (!loadError || hasLoadedProfilesRef.current) && <div className="discover-layout">
+        {canDiscover && (!loadError || hasLoadedProfilesRef.current) && <div className="discover-layout">
           <button
             type="button"
             className="discover-filter-toggle"

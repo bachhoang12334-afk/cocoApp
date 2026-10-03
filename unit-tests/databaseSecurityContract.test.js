@@ -58,6 +58,10 @@ const savedProfilesMigration = await readFile(
   new URL('../supabase/migrations/20260917000019_create_saved_profiles.sql', import.meta.url),
   'utf8'
 )
+const connectionPauseMigration = await readFile(
+  new URL('../supabase/migrations/20260917000020_add_connection_pause.sql', import.meta.url),
+  'utf8'
+)
 const connectionPlansMigration = await readFile(
   new URL('../supabase/migrations/20260917000012_create_connection_plans.sql', import.meta.url),
   'utf8'
@@ -156,6 +160,41 @@ test('connection readiness is shared by discovery and the insert-time database g
     /revoke all on function public\.validate_connection_request\(\)[\s\S]*from public, anon, authenticated;/
   )
   assert.doesNotMatch(connectionReadinessMigration, /profile_private|phone|exact_address/i)
+})
+
+test('pausing new connections is enforced for discovery, requests, and new saves', () => {
+  const availabilityFunction = connectionPauseMigration.match(
+    /create or replace function public\.can_start_new_connections\(profile_id uuid\)[\s\S]*?\$\$;/
+  )?.[0] || ''
+  const discoverFunction = connectionPauseMigration.match(
+    /create or replace function public\.get_discover_profiles\(\)[\s\S]*?\$\$;/
+  )?.[0] || ''
+  const requestGuard = connectionPauseMigration.match(
+    /create or replace function public\.guard_new_connection_availability\(\)[\s\S]*?\$\$;/
+  )?.[0] || ''
+  const savedProfileGuard = connectionPauseMigration.match(
+    /create or replace function public\.validate_saved_profile\(\)[\s\S]*?\$\$;/
+  )?.[0] || ''
+
+  assert.match(connectionPauseMigration, /add column if not exists accepting_connections boolean not null default true/)
+  assert.match(availabilityFunction, /profile\.accepting_connections/)
+  assert.match(availabilityFunction, /is_connection_ready_profile\(profile\.id\)/)
+  assert.match(discoverFunction, /can_start_new_connections\(auth\.uid\(\)\)/)
+  assert.match(discoverFunction, /can_start_new_connections\(profile\.id\)/)
+  assert.match(requestGuard, /can_start_new_connections\(new\.requester_id\)/)
+  assert.match(requestGuard, /can_start_new_connections\(new\.recipient_id\)/)
+  assert.match(requestGuard, /connection_requests_paused/)
+  assert.match(
+    connectionPauseMigration,
+    /before insert on public\.connection_requests[\s\S]*guard_new_connection_availability\(\)/
+  )
+  assert.match(savedProfileGuard, /can_start_new_connections\(new\.owner_id\)/)
+  assert.match(savedProfileGuard, /can_start_new_connections\(new\.saved_profile_id\)/)
+  assert.doesNotMatch(discoverFunction, /profile_private|phone|exact_address/i)
+  assert.match(
+    connectionPauseMigration,
+    /revoke all on function public\.can_start_new_connections\(uuid\)[\s\S]*from public, anon, authenticated;/
+  )
 })
 
 test('connection invitation intros are required for new requests and immutable after sending', () => {
