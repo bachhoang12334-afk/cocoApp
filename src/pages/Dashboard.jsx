@@ -14,8 +14,9 @@ import {
   MATCHES_ACCEPTED_TARGET,
   MATCHES_PENDING_TARGET,
 } from '../lib/appNavigation'
+import { getProfileReadiness } from '../lib/profileReadiness'
 
-const profileFields = [
+const dashboardProfileSelect = [
   'full_name',
   'university',
   'major',
@@ -27,7 +28,13 @@ const profileFields = [
   'area',
   'public_location',
   'proximity_scope',
-]
+  'availability_slots',
+  'collaboration_style',
+  'commitment_level',
+  'email_confirmed',
+  'education_email',
+  'verification_status',
+].join(', ')
 
 const purposeLabels = {
   study_group: 'Học nhóm',
@@ -35,12 +42,6 @@ const purposeLabels = {
   roommates: 'Ghép trọ',
 }
 
-const dashboardProfileSelect = [
-  ...profileFields,
-  'email_confirmed',
-  'education_email',
-  'verification_status',
-].join(', ')
 const quickActions = [
   {
     to: '/study',
@@ -79,11 +80,6 @@ function mapDashboardConnection(request, userId) {
     status: request.status,
     isIncoming,
   }
-}
-
-function hasProfileValue(value) {
-  if (typeof value === 'number') return Number.isFinite(value)
-  return typeof value === 'string' && value.trim() !== ''
 }
 
 export default function Dashboard() {
@@ -163,13 +159,8 @@ export default function Dashboard() {
     ? fullName.split(/\s+/).pop()
     : 'cậu'
 
-  const completedFields = profileFields.filter(
-    (key) => hasProfileValue(profile[key])
-  ).length
-
-  const completion = Math.round(
-    (completedFields / profileFields.length) * 100
-  )
+  const profileReadiness = getProfileReadiness(profile)
+  const completion = profileReadiness.completionPercent
 
   const pending = connections.filter(
     (item) => item.status === 'pending'
@@ -236,10 +227,10 @@ export default function Dashboard() {
               </p>
 
               <Link
-                to={completion === 100 ? '/discover' : '/profile'}
+                to={profileReadiness.isReady ? '/discover' : '/profile?welcome=1'}
                 className="banner-button"
               >
-                {completion === 100 ? 'Khám phá ngay' : 'Cập nhật hồ sơ'}
+                {profileReadiness.isReady ? 'Khám phá ngay' : 'Hoàn thiện hồ sơ'}
                 <Icon name="arrow" />
               </Link>
             </div>
@@ -249,7 +240,7 @@ export default function Dashboard() {
             <article className="metric-card metric-purple">
               <span className="metric-label"><Icon name="profile" /> Hồ sơ</span>
               <strong>{completion}%</strong>
-              <small>{completedFields}/{profileFields.length} thông tin</small>
+              <small>{profileReadiness.completedRequired}/{profileReadiness.requiredTotal} mục bắt buộc</small>
             </article>
             <Link
               to={MATCHES_PENDING_TARGET}
@@ -273,7 +264,10 @@ export default function Dashboard() {
             </div>
 
             <CocoCompass
-              completion={completion}
+              profileReady={profileReadiness.isReady}
+              completedRequired={profileReadiness.completedRequired}
+              requiredTotal={profileReadiness.requiredTotal}
+              missingProfileFields={profileReadiness.missingLabels}
               emailConfirmed={Boolean(profile.email_confirmed)}
               accepted={accepted}
               pending={pending}
@@ -291,8 +285,11 @@ export default function Dashboard() {
           {quickActions.map((action) => (
             <Link
               key={action.to}
-              to={action.to}
+              to={profileReadiness.isReady ? action.to : '/profile?welcome=1'}
               className={`quick-action-card ${action.color}`}
+              aria-label={profileReadiness.isReady
+                ? action.title
+                : `${action.title}: cần hoàn thiện hồ sơ trước`}
             >
               <span className="quick-action-icon" aria-hidden="true">
                 <Icon name={action.icon} />
@@ -379,8 +376,10 @@ export default function Dashboard() {
             </div>
 
             <p>
-              {completedFields}/{profileFields.length} mục đã điền.
-              Mức độ hoàn thiện không có nghĩa là tài khoản đã xác minh.
+              {profileReadiness.isReady
+                ? 'Đã đủ 9 thông tin bắt buộc để xuất hiện trong Khám phá.'
+                : `Còn thiếu: ${profileReadiness.missingLabels.join(', ')}.`}
+              {' '}Mức độ hoàn thiện không có nghĩa là tài khoản đã xác minh.
             </p>
 
             <div className="dashboard-trust-summary" aria-live="polite">

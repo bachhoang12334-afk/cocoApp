@@ -46,6 +46,7 @@ Chạy migrations theo đúng thứ tự trong `supabase/migrations`:
 16. `20260917000015_harden_reports_and_plan_completion.sql`
 17. `20260917000016_harden_connection_request_privileges.sql`
 18. `20260917000017_add_private_proximity_scope.sql`
+19. `20260917000018_enforce_connection_readiness.sql`
 
 Không chỉnh sửa migration đã chạy. Mọi thay đổi schema tiếp theo phải nằm trong migration mới.
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import AppLayout, { Icon } from '../components/AppLayout'
 import { getCurrentAccount } from '../auth'
 import { supabase } from '../lib/supabaseClient'
@@ -18,6 +19,11 @@ import {
   PROXIMITY_SCOPE_OPTIONS,
 } from '../lib/proximityMatching'
 import { VIETNAM_LOCATIONS } from '../data/vietnamLocations'
+import {
+  getProfileReadiness,
+  getPurposeDestination,
+  REQUIRED_PROFILE_FIELDS,
+} from '../lib/profileReadiness'
 
 const defaultProfile = {
   fullName: '',
@@ -42,29 +48,10 @@ const selectOptions = {
   purpose: ['Học nhóm', 'Team Project', 'Ghép trọ'],
 }
 
-const requiredFields = [
-  'fullName',
-  'university',
-  'major',
-  'studyYear',
-  'gender',
-  'purpose',
-  'city',
-  'area',
-  'proximityScope',
-]
-
-const fieldLabels = {
-  fullName: 'Họ và tên',
-  university: 'Trường đại học',
-  major: 'Ngành học',
-  studyYear: 'Năm học',
-  gender: 'Giới tính',
-  purpose: 'Mục tiêu kết nối',
-  city: 'Tỉnh / Thành phố',
-  area: 'Khu vực trong tỉnh / thành phố',
-  proximityScope: 'Phạm vi tìm kiếm',
-}
+const requiredFields = REQUIRED_PROFILE_FIELDS.map((field) => field.key)
+const fieldLabels = Object.fromEntries(
+  REQUIRED_PROFILE_FIELDS.map((field) => [field.key, field.label])
+)
 
 function profileFromSupabase(profile) {
   if (!profile) return { ...defaultProfile }
@@ -98,6 +85,7 @@ function getProfileErrorMessage(error, action) {
 }
 
 export default function Profile() {
+  const location = useLocation()
   const [formData, setFormData] = useState(() => ({ ...defaultProfile }))
   const [savedProfile, setSavedProfile] = useState(() => ({ ...defaultProfile }))
   const [saved, setSaved] = useState(false)
@@ -125,13 +113,12 @@ export default function Profile() {
   const isDirty = JSON.stringify(formData) !== JSON.stringify(savedProfile) ||
     phone !== savedPhone
 
-  const completedFields = Object.values(formData).filter((value) => (
-    Array.isArray(value) ? value.length > 0 : value.trim() !== ''
-  )).length
-
-  const completion = Math.round(
-    (completedFields / Object.keys(defaultProfile).length) * 100
-  )
+  const readiness = getProfileReadiness(formData)
+  const completion = readiness.completionPercent
+  const isPersistedReady = readiness.isReady && !isDirty
+  const purposeDestination = getPurposeDestination(formData.purpose)
+  const showWelcome = location.state?.welcome === true ||
+    new URLSearchParams(location.search).get('welcome') === '1'
 
   const lastName = formData.fullName.trim().split(/\s+/).pop()
   const avatarLetter = lastName ? lastName[0].toUpperCase() : '?'
@@ -232,10 +219,8 @@ export default function Profile() {
   function validateForm(data) {
     const nextErrors = {}
 
-    for (const field of requiredFields) {
-      if (!data[field]) {
-        nextErrors[field] = `${fieldLabels[field]} là thông tin bắt buộc.`
-      }
+    for (const field of getProfileReadiness(data).missingFields) {
+      nextErrors[field.key] = `${field.label} là thông tin bắt buộc.`
     }
 
     return nextErrors
@@ -538,6 +523,63 @@ export default function Profile() {
           </div>
         )}
 
+        {!isLoadingProfile && !loadError && (showWelcome || !isPersistedReady) && (
+          <section
+            className={`profile-readiness-card ${readiness.isReady ? 'is-ready' : ''}`}
+            aria-labelledby="profile-readiness-title"
+          >
+            <div className="profile-readiness-copy">
+              <p>KHỞI ĐỘNG KẾT NỐI</p>
+              <h2 id="profile-readiness-title">
+                {readiness.isReady
+                  ? isDirty
+                    ? 'Hồ sơ đã đủ thông tin — lưu để kích hoạt.'
+                    : 'Hồ sơ đã sẵn sàng để tìm đúng người.'
+                  : `Còn ${readiness.missingFields.length} mục trước khi cậu có thể kết nối.`}
+              </h2>
+              <span>
+                Coco chỉ cần thông tin công khai đủ rõ; số điện thoại và địa chỉ chính xác không nằm trong checklist này.
+              </span>
+            </div>
+
+            <div className="profile-readiness-progress">
+              <strong>{readiness.completedRequired}/{readiness.requiredTotal}</strong>
+              <span>mục bắt buộc</span>
+              <div
+                role="progressbar"
+                aria-label="Tiến độ hồ sơ sẵn sàng kết nối"
+                aria-valuemin={0}
+                aria-valuemax={readiness.requiredTotal}
+                aria-valuenow={readiness.completedRequired}
+              >
+                <span style={{ width: `${(readiness.completedRequired / readiness.requiredTotal) * 100}%` }} />
+              </div>
+            </div>
+
+            {readiness.missingFields.length > 0 && (
+              <ul className="profile-readiness-missing" aria-label="Thông tin còn thiếu">
+                {readiness.missingFields.map((field) => (
+                  <li key={field.key}>
+                    <a href={`#profile-${field.key}`}>{field.label}</a>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {readiness.isReady && (
+              isDirty ? (
+                <button type="submit" form="profile-form" className="profile-readiness-action">
+                  Lưu để sẵn sàng <Icon name="arrow" />
+                </button>
+              ) : (
+                <Link to={purposeDestination} className="profile-readiness-action">
+                  Bắt đầu {formData.purpose.toLowerCase()} <Icon name="arrow" />
+                </Link>
+              )
+            )}
+          </section>
+        )}
+
         {isLoadingProfile && (
           <div className="profile-loading-message" role="status" aria-live="polite">
             Đang tải hồ sơ…
@@ -561,7 +603,10 @@ export default function Profile() {
 
         {saved && (
           <div className="profile-success-message" role="status" aria-live="polite">
-            Đã lưu hồ sơ vào Supabase. Cậu có thể tải lại trang để kiểm tra.
+            <span>Đã lưu hồ sơ vào Supabase. Hồ sơ của cậu đã sẵn sàng kết nối.</span>
+            <Link to={purposeDestination}>
+              Tìm người cho {formData.purpose.toLowerCase()} <Icon name="arrow" />
+            </Link>
           </div>
         )}
 
@@ -589,7 +634,7 @@ export default function Profile() {
 
             <div className="profile-completion">
               <div className="completion-heading">
-                <span>Mức độ hoàn thiện hồ sơ</span>
+                <span>Mức độ phong phú hồ sơ</span>
                 <strong>{completion}%</strong>
               </div>
 

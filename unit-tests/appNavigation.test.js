@@ -27,7 +27,7 @@ test('authenticated accounts leave guest-only auth routes after session checking
   )
 })
 
-test('registration routes authenticated sessions to Dashboard', () => {
+test('registration routes authenticated sessions to the connection-readiness onboarding', () => {
   assert.deepEqual(
     getPostRegistrationNavigation({
       requiresEmailConfirmation: false,
@@ -35,8 +35,11 @@ test('registration routes authenticated sessions to Dashboard', () => {
       email: 'Student@Example.com ',
     }),
     {
-      to: '/dashboard',
-      options: { replace: true },
+      to: '/profile?welcome=1',
+      options: {
+        replace: true,
+        state: { welcome: true },
+      },
     }
   )
 })

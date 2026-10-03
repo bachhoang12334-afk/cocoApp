@@ -1,15 +1,25 @@
 import { Link } from 'react-router-dom'
 import { Icon } from './AppLayout'
 
-function getJourneyState({ completion, emailConfirmed, accepted, pending }) {
+function getJourneyState({
+  profileReady,
+  completedRequired,
+  requiredTotal,
+  missingProfileFields,
+  emailConfirmed,
+  accepted,
+  pending,
+}) {
   const steps = [
     {
       id: 'profile',
       icon: 'profile',
       title: 'Hồ sơ đủ rõ',
-      detail: `${completion}% thông tin đã hoàn thiện`,
-      done: completion >= 70,
-      to: '/profile',
+      detail: profileReady
+        ? `${completedRequired}/${requiredTotal} mục bắt buộc đã đủ`
+        : `Còn thiếu ${missingProfileFields.length} mục bắt buộc`,
+      done: profileReady,
+      to: '/profile?welcome=1',
     },
     {
       id: 'trust',
@@ -29,13 +39,15 @@ function getJourneyState({ completion, emailConfirmed, accepted, pending }) {
     },
   ]
 
-  if (completion < 70) {
+  if (!profileReady) {
     return {
       steps,
       title: 'Làm hồ sơ đủ rõ để người phù hợp hiểu cậu nhanh hơn.',
-      description: 'Ưu tiên mục tiêu, kỹ năng và khu vực. Một hồ sơ rõ ràng giúp lời mời kết nối có lý do hơn.',
+      description: missingProfileFields.length > 0
+        ? `Bổ sung ${missingProfileFields.slice(0, 3).join(', ')}${missingProfileFields.length > 3 ? '…' : ''} để bắt đầu kết nối.`
+        : 'Ưu tiên mục tiêu, kỹ năng và khu vực. Một hồ sơ rõ ràng giúp lời mời kết nối có lý do hơn.',
       action: 'Hoàn thiện hồ sơ',
-      to: '/profile',
+      to: '/profile?welcome=1',
     }
   }
 
@@ -78,8 +90,24 @@ function getJourneyState({ completion, emailConfirmed, accepted, pending }) {
   }
 }
 
-export default function CocoCompass({ completion, emailConfirmed, accepted, pending }) {
-  const journey = getJourneyState({ completion, emailConfirmed, accepted, pending })
+export default function CocoCompass({
+  profileReady,
+  completedRequired,
+  requiredTotal,
+  missingProfileFields,
+  emailConfirmed,
+  accepted,
+  pending,
+}) {
+  const journey = getJourneyState({
+    profileReady,
+    completedRequired,
+    requiredTotal,
+    missingProfileFields,
+    emailConfirmed,
+    accepted,
+    pending,
+  })
   const completedSteps = journey.steps.filter((step) => step.done).length
   const activeStep = journey.steps.find((step) => !step.done)?.id
 

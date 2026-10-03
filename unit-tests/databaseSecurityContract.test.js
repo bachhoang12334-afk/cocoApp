@@ -50,6 +50,10 @@ const proximityScopeMigration = await readFile(
   new URL('../supabase/migrations/20260917000017_add_private_proximity_scope.sql', import.meta.url),
   'utf8'
 )
+const connectionReadinessMigration = await readFile(
+  new URL('../supabase/migrations/20260917000018_enforce_connection_readiness.sql', import.meta.url),
+  'utf8'
+)
 const connectionPlansMigration = await readFile(
   new URL('../supabase/migrations/20260917000012_create_connection_plans.sql', import.meta.url),
   'utf8'
@@ -106,6 +110,48 @@ test('connection request writes expose only the client-owned business fields', (
     'grant insert ( requester_id, recipient_id, purpose, intro_message ) on table public.connection_requests to authenticated',
     'grant update (status) on table public.connection_requests to authenticated',
   ])
+})
+
+test('connection readiness is shared by discovery and the insert-time database guard', () => {
+  const readinessFunction = connectionReadinessMigration.match(
+    /create or replace function public\.is_connection_ready_profile\(profile_id uuid\)[\s\S]*?\$\$;/
+  )?.[0] || ''
+  const discoverFunction = connectionReadinessMigration.match(
+    /create or replace function public\.get_discover_profiles\(\)[\s\S]*?\$\$;/
+  )?.[0] || ''
+  const validationFunction = connectionReadinessMigration.match(
+    /create or replace function public\.validate_connection_request\(\)[\s\S]*?\$\$;/
+  )?.[0] || ''
+
+  for (const field of [
+    'full_name',
+    'university',
+    'major',
+    'study_year',
+    'gender',
+    'purpose',
+    'city',
+    'area',
+    'proximity_scope',
+  ]) {
+    assert.match(readinessFunction, new RegExp(`profile\\.${field}`))
+  }
+
+  assert.match(discoverFunction, /is_connection_ready_profile\(auth\.uid\(\)\)/)
+  assert.match(discoverFunction, /is_connection_ready_profile\(profile\.id\)/)
+  assert.match(
+    validationFunction,
+    /tg_op = 'INSERT'[\s\S]*is_connection_ready_profile\(new\.requester_id\)[\s\S]*is_connection_ready_profile\(new\.recipient_id\)[\s\S]*connection_profile_not_ready/
+  )
+  assert.match(
+    connectionReadinessMigration,
+    /revoke all on function public\.is_connection_ready_profile\(uuid\)[\s\S]*from public, anon, authenticated;/
+  )
+  assert.match(
+    connectionReadinessMigration,
+    /revoke all on function public\.validate_connection_request\(\)[\s\S]*from public, anon, authenticated;/
+  )
+  assert.doesNotMatch(connectionReadinessMigration, /profile_private|phone|exact_address/i)
 })
 
 test('connection invitation intros are required for new requests and immutable after sending', () => {

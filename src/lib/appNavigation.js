@@ -27,8 +27,11 @@ export function getPostRegistrationNavigation({
 }) {
   if (isAuthenticated) {
     return {
-      to: '/dashboard',
-      options: { replace: true },
+      to: '/profile?welcome=1',
+      options: {
+        replace: true,
+        state: { welcome: true },
+      },
     }
   }
 

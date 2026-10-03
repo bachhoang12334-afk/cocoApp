@@ -29,6 +29,7 @@ import {
   normalizeProximityScope,
   PROXIMITY_SCOPE_OPTIONS,
 } from '../lib/proximityMatching'
+import { getProfileReadiness } from '../lib/profileReadiness'
 
 const purposes = ['Tất cả', 'Học nhóm', 'Team Project', 'Ghép trọ']
 const purposeValues = {
@@ -116,8 +117,11 @@ function mapProfilePreferences(profile) {
   const city = profile?.city?.trim() || ''
 
   return {
+    fullName: profile?.full_name?.trim() || '',
+    university: profile?.university?.trim() || '',
     gender: profile?.gender?.trim() || '',
     major: profile?.major?.trim() || '',
+    studyYear: profile?.study_year?.trim() || '',
     purpose: profile?.purpose?.trim() || '',
     city,
     area: profile?.area?.trim() || '',
@@ -161,13 +165,20 @@ function getRequestErrorMessage(error) {
     return 'Lời nhắn cần có từ 8 đến 240 ký tự và không thể để trống.'
   }
 
+  if (message.includes('connection_profile_not_ready')) {
+    return 'Một trong hai hồ sơ chưa đủ thông tin để kết nối. Hãy làm mới danh sách và thử lại.'
+  }
+
   return 'Chưa gửi được lời mời. Hãy thử lại sau.'
 }
 
 export default function Discover({ initialPurpose = 'Tất cả' }) {
   const [profile, setProfile] = useState({
+    fullName: '',
+    university: '',
     gender: '',
     major: '',
+    studyYear: '',
     purpose: '',
     city: '',
     area: '',
@@ -225,7 +236,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
         const [ownResult, othersResult, requestResult] = await Promise.all([
           supabase
             .from('profiles')
-            .select('gender, major, purpose, city, area, proximity_scope, availability_slots, collaboration_style, commitment_level')
+            .select('full_name, university, major, study_year, gender, purpose, city, area, proximity_scope, availability_slots, collaboration_style, commitment_level')
             .eq('id', user.id)
             .maybeSingle(),
           supabase.rpc('get_discover_profiles'),
@@ -295,6 +306,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
   }
 
   const canFilterRoommates = ['Nam', 'Nữ', 'Khác'].includes(profile.gender)
+  const profileReadiness = getProfileReadiness(profile)
 
   const cities = uniqueLocations([
     ...VIETNAM_LOCATIONS,
@@ -395,6 +407,16 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
   }
 
   function openInvite(student) {
+    if (!profileReadiness.isReady) {
+      setRequestNotice('Hãy hoàn thiện hồ sơ trước khi gửi lời mời kết nối.')
+      return
+    }
+
+    if (!purposeValues[student.purpose]) {
+      setRequestNotice('Hồ sơ này chưa có mục tiêu kết nối hợp lệ. Hãy làm mới danh sách.')
+      return
+    }
+
     const currentStatus = requestStatuses[requestKey(student.profileId)]
     if (currentStatus === 'pending' || currentStatus === 'accepted') return
 
@@ -428,7 +450,17 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
   async function sendInvite(event) {
     event.preventDefault()
     const student = inviteStudent
-    if (!student || !purposeValues[student.purpose]) return
+    if (!student) return
+
+    if (!profileReadiness.isReady) {
+      setInviteError('Hãy hoàn thiện hồ sơ trước khi gửi lời mời kết nối.')
+      return
+    }
+
+    if (!purposeValues[student.purpose]) {
+      setInviteError('Hồ sơ này chưa có mục tiêu kết nối hợp lệ. Hãy đóng cửa sổ và làm mới danh sách.')
+      return
+    }
 
     const messageError = getConnectionInviteError(inviteMessage)
     if (messageError) {
@@ -504,7 +536,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
             <p>Tìm theo mục tiêu, kỹ năng và khu vực — không phải lướt ngẫu nhiên.</p>
           </div>
           <div className="discover-head-actions">
-            <span aria-live="polite"><strong>{filteredStudents.length}</strong> kết quả phù hợp</span>
+            <span aria-live="polite"><strong>{profileReadiness.isReady ? filteredStudents.length : 0}</strong> kết quả phù hợp</span>
             <Link to="/profile" className="secondary-action">Cập nhật tiêu chí</Link>
           </div>
         </header>
@@ -537,6 +569,22 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
           />
         )}
 
+        {!isLoading && !loadError && !profileReadiness.isReady && (
+          <section className="discover-readiness-blocker" aria-labelledby="discover-readiness-title">
+            <span className="discover-readiness-icon" aria-hidden="true"><Icon name="profile" /></span>
+            <div>
+              <p>HỒ SƠ CHƯA SẴN SÀNG</p>
+              <h2 id="discover-readiness-title">Bổ sung thông tin trước khi xuất hiện và kết nối trong cộng đồng.</h2>
+              <span>
+                Còn thiếu: {profileReadiness.missingLabels.join(', ')}. Coco không yêu cầu số điện thoại hoặc địa chỉ chính xác.
+              </span>
+            </div>
+            <Link to="/profile?welcome=1">
+              Hoàn thiện hồ sơ <Icon name="arrow" />
+            </Link>
+          </section>
+        )}
+
         {requestNotice && (
           <div className="matches-status-message" role="status" aria-live="polite">
             <Icon name="connection" /> {requestNotice}
@@ -549,7 +597,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
           </div>
         )}
 
-        {(!loadError || hasLoadedProfilesRef.current) && <div className="discover-layout">
+        {profileReadiness.isReady && (!loadError || hasLoadedProfilesRef.current) && <div className="discover-layout">
           <button
             type="button"
             className="discover-filter-toggle"
