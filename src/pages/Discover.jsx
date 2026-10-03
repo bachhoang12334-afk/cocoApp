@@ -30,6 +30,12 @@ import {
   PROXIMITY_SCOPE_OPTIONS,
 } from '../lib/proximityMatching'
 import { getProfileReadiness } from '../lib/profileReadiness'
+import { getCommunityInviteMessage } from '../lib/communityInvite'
+import {
+  getSavedProfileErrorMessage,
+  normalizeSavedProfileIds,
+  updateSavedProfileIds,
+} from '../lib/savedProfiles'
 
 const purposes = ['Tất cả', 'Học nhóm', 'Team Project', 'Ghép trọ']
 const purposeValues = {
@@ -209,6 +215,13 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
   const [requestStatuses, setRequestStatuses] = useState({})
   const [sendingIds, setSendingIds] = useState({})
   const [hiddenIds, setHiddenIds] = useState([])
+  const [savedProfileIds, setSavedProfileIds] = useState([])
+  const [savingProfileIds, setSavingProfileIds] = useState({})
+  const [showSavedOnly, setShowSavedOnly] = useState(false)
+  const [savedStatus, setSavedStatus] = useState('')
+  const [savedError, setSavedError] = useState('')
+  const [communityInviteStatus, setCommunityInviteStatus] = useState('')
+  const [communityInviteError, setCommunityInviteError] = useState('')
   const dialogRef = useRef(null)
   const lastProfileTriggerRef = useRef(null)
   const inviteTriggerRef = useRef(null)
@@ -233,7 +246,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
 
         if (!user) throw new Error('Phiên đăng nhập đã hết.')
 
-        const [ownResult, othersResult, requestResult] = await Promise.all([
+        const [ownResult, othersResult, requestResult, savedResult] = await Promise.all([
           supabase
             .from('profiles')
             .select('full_name, university, major, study_year, gender, purpose, city, area, proximity_scope, availability_slots, collaboration_style, commitment_level')
@@ -244,6 +257,11 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
             .from('connection_requests')
             .select('recipient_id, requester_id, purpose, status')
             .or(`requester_id.eq.${user.id},recipient_id.eq.${user.id}`),
+          supabase
+            .from('saved_profiles')
+            .select('saved_profile_id')
+            .eq('owner_id', user.id)
+            .order('created_at', { ascending: false }),
         ])
 
         if (ownResult.error) throw ownResult.error
@@ -270,6 +288,12 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
                 item.status,
               ])
           ))
+          if (savedResult.error) {
+            setSavedError(getSavedProfileErrorMessage(savedResult.error))
+          } else {
+            setSavedProfileIds(normalizeSavedProfileIds(savedResult.data))
+            setSavedError('')
+          }
           setLoadError('')
           hasLoadedProfilesRef.current = true
         }
@@ -344,6 +368,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
       (!city || normalize(student.city) === normalize(city)) &&
       (!area || normalize(student.area) === normalize(area)) &&
       genderMatches &&
+      (!showSavedOnly || savedProfileIds.includes(student.profileId)) &&
       !hiddenIds.includes(student.id)
     )
   })
@@ -366,6 +391,10 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
         ...student,
         fit: getMatchSignals(fitPreferences, student),
       }))
+
+  const availableSavedCount = students.filter(
+    (student) => savedProfileIds.includes(student.profileId)
+  ).length
 
   const selectedStudent = rankedStudents.find(
     (student) => student.id === selectedId
@@ -505,12 +534,75 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
     }
   }
 
+  async function toggleSavedProfile(student) {
+    const profileId = student.profileId
+    if (!profileId || savingProfileIds[profileId]) return
+
+    const isSaved = savedProfileIds.includes(profileId)
+    setSavingProfileIds((current) => ({ ...current, [profileId]: true }))
+    setSavedStatus('')
+    setSavedError('')
+
+    try {
+      const user = await getCurrentAccount()
+      if (!user) throw new Error('Phiên đăng nhập đã hết.')
+
+      const result = isSaved
+        ? await supabase
+            .from('saved_profiles')
+            .delete()
+            .eq('owner_id', user.id)
+            .eq('saved_profile_id', profileId)
+        : await supabase
+            .from('saved_profiles')
+            .insert({ owner_id: user.id, saved_profile_id: profileId })
+
+      if (result.error) throw result.error
+
+      setSavedProfileIds((current) => (
+        updateSavedProfileIds(current, profileId, !isSaved)
+      ))
+      setSavedStatus(isSaved
+        ? `Đã bỏ ${student.name} khỏi danh sách Đã lưu.`
+        : `Đã lưu ${student.name} để xem lại. Người này sẽ không nhận thông báo.`)
+
+      if (isSaved && showSavedOnly && selectedStudent?.profileId === profileId) {
+        closeProfile()
+      }
+    } catch (error) {
+      setSavedError(getSavedProfileErrorMessage(error))
+    } finally {
+      setSavingProfileIds((current) => {
+        const next = { ...current }
+        delete next[profileId]
+        return next
+      })
+    }
+  }
+
+  async function copyCommunityInvite() {
+    setCommunityInviteStatus('')
+    setCommunityInviteError('')
+
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error('Clipboard API unavailable')
+      }
+
+      await navigator.clipboard.writeText(getCommunityInviteMessage(window.location.origin))
+      setCommunityInviteStatus('Đã sao chép lời mời Coco. Cậu có thể gửi cho bạn bè qua kênh mình tin tưởng.')
+    } catch {
+      setCommunityInviteError('Chưa sao chép được lời mời. Hãy mở trang đăng ký và sao chép liên kết từ thanh địa chỉ.')
+    }
+  }
+
   function resetFilters() {
     setSearch('')
     setPurpose('Tất cả')
     setCity('')
     setArea('')
     setProximityScope(profile.proximityScope)
+    setShowSavedOnly(false)
     setHiddenIds([])
     setUndoStudent(null)
     closeProfile(false)
@@ -518,6 +610,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
 
   function handleBlocked(profileId, name) {
     setStudents((current) => current.filter((student) => student.profileId !== profileId))
+    setSavedProfileIds((current) => updateSavedProfileIds(current, profileId, false))
     setSelectedId(null)
     setSafetyStatus(`Đã chặn ${name}. Lời mời hoặc kết nối hiện tại đã được đóng.`)
   }
@@ -594,6 +687,30 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
         {safetyStatus && (
           <div className="matches-status-message" role="status" aria-live="polite">
             <Icon name="safety" /> {safetyStatus}
+          </div>
+        )}
+
+        {savedStatus && (
+          <div className="matches-status-message" role="status" aria-live="polite">
+            <Icon name="bookmark" /> {savedStatus}
+          </div>
+        )}
+
+        {savedError && (
+          <div className="form-error-banner" role="alert">
+            {savedError}
+          </div>
+        )}
+
+        {communityInviteStatus && (
+          <div className="matches-status-message" role="status" aria-live="polite">
+            <Icon name="team" /> {communityInviteStatus}
+          </div>
+        )}
+
+        {communityInviteError && (
+          <div className="form-error-banner" role="alert">
+            {communityInviteError}
           </div>
         )}
 
@@ -728,6 +845,18 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
                 <span>Coco Fit giải thích từng điểm chung, không chấm điểm con người</span>
               </div>
               <div className="discover-toolbar-actions">
+                <button
+                  type="button"
+                  className={`saved-profiles-filter ${showSavedOnly ? 'is-active' : ''}`}
+                  aria-pressed={showSavedOnly}
+                  onClick={() => {
+                    setShowSavedOnly((current) => !current)
+                    closeProfile(false)
+                  }}
+                >
+                  <Icon name="bookmark" />
+                  Đã lưu <span aria-hidden="true">{availableSavedCount}</span>
+                </button>
                 <label className="discover-sort-field">
                   <span>Sắp xếp</span>
                   <select value={sortMode} onChange={(event) => setSortMode(event.target.value)}>
@@ -840,6 +969,24 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
 
                       <button
                         type="button"
+                        className={`save-student-button ${savedProfileIds.includes(student.profileId) ? 'is-saved' : ''}`}
+                        aria-label={savedProfileIds.includes(student.profileId)
+                          ? `Bỏ ${student.name} khỏi danh sách Đã lưu`
+                          : `Lưu hồ sơ ${student.name} để xem lại`}
+                        aria-pressed={savedProfileIds.includes(student.profileId)}
+                        disabled={Boolean(savingProfileIds[student.profileId])}
+                        onClick={() => toggleSavedProfile(student)}
+                      >
+                        <Icon name="bookmark" />
+                        {savingProfileIds[student.profileId]
+                          ? 'Đang lưu…'
+                          : savedProfileIds.includes(student.profileId)
+                            ? 'Đã lưu'
+                            : 'Lưu xem sau'}
+                      </button>
+
+                      <button
+                        type="button"
                         className="connect-student-button"
                         disabled={requestPending || requestAccepted || sendingIds[studentRequestKey]}
                         onClick={() => openInvite(student)}
@@ -868,16 +1015,40 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
 
             {!isLoading && !loadError && filteredStudents.length === 0 && (
               <div className="discover-empty-state">
-                <div className="discover-empty-icon" aria-hidden="true"><Icon name="discover" /></div>
-                <h2>{students.length === 0 ? 'Chưa có người dùng khác' : 'Chưa có kết quả phù hợp'}</h2>
+                <div className="discover-empty-icon" aria-hidden="true">
+                  <Icon name={showSavedOnly ? 'bookmark' : 'discover'} />
+                </div>
+                <h2>{showSavedOnly
+                  ? availableSavedCount === 0
+                    ? 'Chưa có hồ sơ đã lưu'
+                    : 'Chưa có hồ sơ đã lưu phù hợp'
+                  : students.length === 0
+                    ? 'Chưa có người dùng khác'
+                    : 'Chưa có kết quả phù hợp'}</h2>
                 <p>
-                  {students.length === 0
+                  {showSavedOnly
+                    ? availableSavedCount === 0
+                      ? 'Dùng nút Lưu xem sau trên một hồ sơ để tạo danh sách riêng tư của cậu.'
+                      : 'Một bộ lọc khác đang ẩn các hồ sơ đã lưu. Bỏ lọc Đã lưu hoặc đặt lại bộ lọc.'
+                    : students.length === 0
                     ? 'Khi có thêm hồ sơ công khai, cậu sẽ thấy các kết nối phù hợp ở đây.'
                     : 'Thử mở rộng phạm vi, đổi địa điểm hoặc đặt lại bộ lọc.'}
                 </p>
-                <button type="button" onClick={resetFilters}>
-                  Đặt lại bộ lọc
-                </button>
+                {students.length === 0 && !showSavedOnly ? (
+                  <div className="discover-empty-actions">
+                    <button type="button" onClick={copyCommunityInvite}>
+                      <Icon name="team" /> Sao chép lời mời Coco
+                    </button>
+                    <Link to="/profile">Kiểm tra hồ sơ của tôi</Link>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={showSavedOnly ? () => setShowSavedOnly(false) : resetFilters}
+                  >
+                    {showSavedOnly ? 'Xem tất cả hồ sơ' : 'Đặt lại bộ lọc'}
+                  </button>
+                )}
               </div>
             )}
 
@@ -972,6 +1143,23 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
               <footer className="discover-dialog-actions">
                 <button type="button" className="view-student-button" onClick={skipProfile}>
                   Bỏ qua hồ sơ
+                </button>
+                <button
+                  type="button"
+                  className={`save-student-button ${savedProfileIds.includes(selectedStudent.profileId) ? 'is-saved' : ''}`}
+                  aria-label={savedProfileIds.includes(selectedStudent.profileId)
+                    ? `Bỏ ${selectedStudent.name} khỏi danh sách Đã lưu`
+                    : `Lưu hồ sơ ${selectedStudent.name} để xem lại`}
+                  aria-pressed={savedProfileIds.includes(selectedStudent.profileId)}
+                  disabled={Boolean(savingProfileIds[selectedStudent.profileId])}
+                  onClick={() => toggleSavedProfile(selectedStudent)}
+                >
+                  <Icon name="bookmark" />
+                  {savingProfileIds[selectedStudent.profileId]
+                    ? 'Đang lưu…'
+                    : savedProfileIds.includes(selectedStudent.profileId)
+                      ? 'Đã lưu'
+                      : 'Lưu xem sau'}
                 </button>
                 <button
                   type="button"

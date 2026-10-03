@@ -54,6 +54,10 @@ const connectionReadinessMigration = await readFile(
   new URL('../supabase/migrations/20260917000018_enforce_connection_readiness.sql', import.meta.url),
   'utf8'
 )
+const savedProfilesMigration = await readFile(
+  new URL('../supabase/migrations/20260917000019_create_saved_profiles.sql', import.meta.url),
+  'utf8'
+)
 const connectionPlansMigration = await readFile(
   new URL('../supabase/migrations/20260917000012_create_connection_plans.sql', import.meta.url),
   'utf8'
@@ -479,4 +483,60 @@ test('Coco Plan serializes plan writes with disconnects and rejects no-op update
     reportAndPlanHardeningMigration,
     /revoke all on function public\.validate_connection_plan\(\)\s+from public, anon, authenticated;/
   )
+})
+
+test('saved profiles are private owner-only rows with no update surface', () => {
+  assert.match(savedProfilesMigration, /create table if not exists public\.saved_profiles/)
+  assert.match(savedProfilesMigration, /primary key \(owner_id, saved_profile_id\)/)
+  assert.match(savedProfilesMigration, /constraint saved_profiles_not_self check \(owner_id <> saved_profile_id\)/)
+  assert.match(savedProfilesMigration, /alter table public\.saved_profiles enable row level security/)
+  assert.match(savedProfilesMigration, /revoke all on table public\.saved_profiles from anon, authenticated/)
+  assert.match(savedProfilesMigration, /grant select on table public\.saved_profiles to authenticated/)
+  assert.match(savedProfilesMigration, /grant insert \(owner_id, saved_profile_id\)/)
+  assert.match(savedProfilesMigration, /grant delete on table public\.saved_profiles to authenticated/)
+  assert.doesNotMatch(savedProfilesMigration, /grant[^;]*update[^;]*public\.saved_profiles/i)
+})
+
+test('saved-profile RLS scopes select, insert, and delete to the authenticated owner', () => {
+  assert.match(
+    savedProfilesMigration,
+    /for select[\s\S]*using \(owner_id = \(select auth\.uid\(\)\)\)/
+  )
+  assert.match(
+    savedProfilesMigration,
+    /for insert[\s\S]*with check \([\s\S]*owner_id = \(select auth\.uid\(\)\)[\s\S]*saved_profile_id <> \(select auth\.uid\(\)\)/
+  )
+  assert.match(
+    savedProfilesMigration,
+    /for delete[\s\S]*using \(owner_id = \(select auth\.uid\(\)\)\)/
+  )
+})
+
+test('saved-profile validation requires ready, unblocked profiles and creates no notification', () => {
+  const validationFunction = savedProfilesMigration.match(
+    /create or replace function public\.validate_saved_profile\(\)[\s\S]*?\$\$;/
+  )?.[0] || ''
+
+  assert.match(validationFunction, /security definer/)
+  assert.match(validationFunction, /set search_path = ''/)
+  assert.match(validationFunction, /new\.owner_id <> auth\.uid\(\)/)
+  assert.match(validationFunction, /is_connection_ready_profile\(new\.owner_id\)/)
+  assert.match(validationFunction, /is_connection_ready_profile\(new\.saved_profile_id\)/)
+  assert.match(validationFunction, /block\.blocker_id = new\.owner_id and block\.blocked_id = new\.saved_profile_id/)
+  assert.match(validationFunction, /block\.blocker_id = new\.saved_profile_id and block\.blocked_id = new\.owner_id/)
+  assert.match(savedProfilesMigration, /revoke all on function public\.validate_saved_profile\(\)/)
+  assert.doesNotMatch(savedProfilesMigration, /insert into public\.notifications/i)
+})
+
+test('blocking removes saved-profile links in either direction', () => {
+  const cleanupFunction = savedProfilesMigration.match(
+    /create or replace function public\.remove_saved_profiles_on_block\(\)[\s\S]*?\$\$;/
+  )?.[0] || ''
+
+  assert.match(cleanupFunction, /security definer/)
+  assert.match(cleanupFunction, /delete from public\.saved_profiles/)
+  assert.match(cleanupFunction, /saved\.owner_id = new\.blocker_id and saved\.saved_profile_id = new\.blocked_id/)
+  assert.match(cleanupFunction, /saved\.owner_id = new\.blocked_id and saved\.saved_profile_id = new\.blocker_id/)
+  assert.match(savedProfilesMigration, /after insert on public\.user_blocks/)
+  assert.match(savedProfilesMigration, /revoke all on function public\.remove_saved_profiles_on_block\(\)/)
 })

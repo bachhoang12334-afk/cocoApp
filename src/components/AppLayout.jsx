@@ -75,6 +75,7 @@ export function Icon({ name }) {
     menu: <><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></>,
     arrow: <><path d="M5 12h13"/><path d="m13 6 6 6-6 6"/></>,
     spark: <><path d="m12 3 1.6 5.4L19 10l-5.4 1.6L12 17l-1.6-5.4L5 10l5.4-1.6L12 3Z"/><path d="m19 16 .7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z"/></>,
+    bookmark: <><path d="M6 4.8A1.8 1.8 0 0 1 7.8 3h8.4A1.8 1.8 0 0 1 18 4.8V21l-6-3.8L6 21V4.8Z"/></>,
   }
 
   return (

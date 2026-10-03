@@ -11,6 +11,7 @@ import {
   subscribeToAuthState,
 } from './auth'
 import { getGuestRouteRedirect } from './lib/appNavigation'
+import { supabaseConfiguration } from './lib/supabaseClient'
 import './App.css'
 import './ProductV2.css'
 
@@ -68,6 +69,23 @@ class RouteErrorBoundary extends Component {
   }
 }
 
+function ConfigurationErrorState() {
+  return (
+    <main className="configuration-error-page">
+      <section className="configuration-error-card" role="alert">
+        <span className="configuration-error-mark" aria-hidden="true">C</span>
+        <p>THIẾU CẤU HÌNH</p>
+        <h1>CocoApp chưa kết nối với Supabase.</h1>
+        <span>
+          Tạo file <code>.env.local</code> từ <code>.env.example</code>, điền URL và
+          publishable key của dự án, rồi khởi động lại máy chủ phát triển.
+        </span>
+        <small>Không dán service role key vào ứng dụng phía trình duyệt.</small>
+      </section>
+    </main>
+  )
+}
+
 function RequireLogin({ children, account, isCheckingSession }) {
   if (isCheckingSession) return null
 
@@ -121,9 +139,15 @@ function guestPage(page, account, isCheckingSession) {
 
 export default function App() {
   const [account, setAccount] = useState(null)
-  const [isCheckingSession, setIsCheckingSession] = useState(true)
+  const [isCheckingSession, setIsCheckingSession] = useState(
+    supabaseConfiguration.isConfigured
+  )
 
   useEffect(() => {
+    if (!supabaseConfiguration.isConfigured) {
+      return undefined
+    }
+
     let isMounted = true
 
     getCurrentAccount()
@@ -149,6 +173,10 @@ export default function App() {
       unsubscribe()
     }
   }, [])
+
+  if (!supabaseConfiguration.isConfigured) {
+    return <ConfigurationErrorState />
+  }
 
   return (
     <BrowserRouter>

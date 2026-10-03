@@ -7347,3 +7347,304 @@ textarea:focus-visible {
     width: 100%;
   }
 }
+
+/* Private Saved Profiles */
+.saved-profiles-filter,
+.save-student-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: #34545b;
+  border: 1px solid #bfd7d8;
+  background: #f7fbfb;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease;
+}
+
+.saved-profiles-filter {
+  min-height: 38px;
+  padding: 0 11px;
+  border-radius: 9px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.saved-profiles-filter svg,
+.save-student-button svg,
+.matches-status-message svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+.saved-profiles-filter > span {
+  display: grid;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  place-items: center;
+  color: #456269;
+  border-radius: 999px;
+  background: #e4f0ef;
+  font-size: 10px;
+}
+
+.saved-profiles-filter.is-active,
+.save-student-button.is-saved {
+  color: #fff;
+  border-color: var(--coco-primary);
+  background: var(--coco-primary);
+}
+
+.saved-profiles-filter.is-active > span {
+  color: #fff;
+  background: rgba(255, 255, 255, .18);
+}
+
+.saved-profiles-filter:hover,
+.save-student-button:hover:not(:disabled) {
+  color: var(--coco-primary-dark);
+  border-color: #84b9bb;
+  background: #edf7f6;
+}
+
+.saved-profiles-filter.is-active:hover,
+.save-student-button.is-saved:hover:not(:disabled) {
+  color: #fff;
+  border-color: var(--coco-primary-dark);
+  background: var(--coco-primary-dark);
+}
+
+.saved-profiles-filter:focus-visible,
+.save-student-button:focus-visible {
+  outline: 3px solid rgba(28, 126, 137, .2);
+  outline-offset: 2px;
+}
+
+.save-student-button:disabled {
+  opacity: .62;
+  cursor: wait;
+}
+
+.student-card-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.student-card-actions > .connect-student-button,
+.student-card-actions > .safety-action-trigger {
+  grid-column: 1 / -1;
+}
+
+.student-card-actions > .save-student-button {
+  min-height: 44px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.discover-dialog-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.discover-dialog-actions .save-student-button {
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 8px;
+}
+
+@media (max-width: 760px) {
+  .discover-toolbar-actions {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 620px) {
+  .discover-toolbar-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .discover-sort-field {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .saved-profiles-filter,
+  .discover-toolbar-actions > button:last-child {
+    width: 100%;
+  }
+
+  .discover-dialog-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 420px) {
+  .student-card-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .student-card-actions > .connect-student-button,
+  .student-card-actions > .safety-action-trigger {
+    grid-column: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .saved-profiles-filter,
+  .save-student-button {
+    transition: none;
+  }
+}
+
+.discover-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.discover-empty-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #fff;
+  border-color: var(--coco-primary);
+  background: var(--coco-primary);
+}
+
+.discover-empty-actions button:hover {
+  color: #fff;
+  border-color: var(--coco-primary-dark);
+  background: var(--coco-primary-dark);
+}
+
+.discover-empty-actions button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.discover-empty-actions a {
+  display: inline-flex;
+  min-height: 44px;
+  padding: 0 15px;
+  align-items: center;
+  justify-content: center;
+  color: var(--coco-primary-dark);
+  border: 1px solid #a9cfd3;
+  border-radius: 8px;
+  background: #f5fbfb;
+  font-size: 12px;
+  font-weight: 780;
+  text-decoration: none;
+}
+
+.discover-empty-actions a:focus-visible {
+  outline: 3px solid rgba(28, 126, 137, .2);
+  outline-offset: 2px;
+}
+
+@media (max-width: 520px) {
+  .discover-empty-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .discover-empty-actions button,
+  .discover-empty-actions a {
+    width: 100%;
+  }
+}
+
+/* Startup configuration recovery */
+.configuration-error-page {
+  min-height: 100vh;
+  display: grid;
+  padding: 24px;
+  place-items: center;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(28, 126, 137, .13), transparent 30%),
+    radial-gradient(circle at 82% 82%, rgba(241, 120, 98, .12), transparent 28%),
+    #f5f8f8;
+}
+
+.configuration-error-card {
+  width: min(100%, 620px);
+  display: grid;
+  justify-items: start;
+  padding: 34px;
+  color: var(--coco-ink);
+  border: 1px solid #d5e3e3;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: 0 24px 70px rgba(18, 63, 70, .12);
+}
+
+.configuration-error-mark {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  margin-bottom: 20px;
+  place-items: center;
+  color: #fff;
+  border-radius: 17px;
+  background: var(--coco-primary);
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.configuration-error-card p {
+  margin: 0;
+  color: var(--coco-primary-dark);
+  font-size: 10px;
+  font-weight: 880;
+  letter-spacing: .12em;
+}
+
+.configuration-error-card h1 {
+  margin: 8px 0 12px;
+  font-size: clamp(25px, 5vw, 36px);
+  line-height: 1.16;
+}
+
+.configuration-error-card > span:not(.configuration-error-mark) {
+  color: var(--coco-muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.configuration-error-card code {
+  padding: 2px 6px;
+  color: #28565c;
+  border-radius: 5px;
+  background: #edf6f5;
+  font-size: .92em;
+  font-weight: 750;
+}
+
+.configuration-error-card small {
+  margin-top: 18px;
+  padding: 10px 12px;
+  color: #884538;
+  border-left: 3px solid #df8a76;
+  background: #fff6f3;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 520px) {
+  .configuration-error-page {
+    align-items: start;
+    padding: 14vh 16px 24px;
+  }
+
+  .configuration-error-card {
+    padding: 25px 22px;
+    border-radius: 18px;
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "CocoApp – Kết nối sinh viên đúng mục tiêu",
+  "short_name": "CocoApp",
+  "description": "Tìm bạn học, team project và người ghép trọ theo mục tiêu rõ ràng.",
+  "lang": "vi",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f5f8f8",
+  "theme_color": "#0e5963",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
