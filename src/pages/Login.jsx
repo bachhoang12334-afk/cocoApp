@@ -163,7 +163,14 @@ export default function Login() {
               <p>Đăng nhập bằng tài khoản cậu đã đăng ký.</p>
             </div>
 
-            {location.state?.passwordReset ? (
+            {location.state?.accountDeleted ? (
+              <div className="discover-demo-note auth-success-note" role="status">
+                Tài khoản và dữ liệu Coco của cậu đã được xoá vĩnh viễn.
+                {location.state?.sessionCleanupWarning
+                  ? ' Hãy đóng tab này nếu thiết bị vẫn còn hiển thị phiên cũ.'
+                  : ' Cậu đã được đăng xuất khỏi thiết bị này.'}
+              </div>
+            ) : location.state?.passwordReset ? (
               <div className="discover-demo-note auth-success-note" role="status">
                 Mật khẩu đã được cập nhật. Các phiên cũ đã đăng xuất; cậu có thể đăng nhập lại ngay.
               </div>

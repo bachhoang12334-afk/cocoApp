@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabaseClient'
 import TrustBadge from '../components/TrustBadge'
 import { getTrustSignal } from '../lib/trustSignals'
 import DataRecoveryState from '../components/DataRecoveryState'
+import AccountDangerZone from '../components/AccountDangerZone'
 import {
   AVAILABILITY_OPTIONS,
   COLLABORATION_STYLE_OPTIONS,
@@ -86,7 +87,7 @@ function getProfileErrorMessage(error, action) {
   return `Không thể ${action} hồ sơ. Hãy thử lại sau.`
 }
 
-export default function Profile() {
+export default function Profile({ onAccountDeleted }) {
   const location = useLocation()
   const [formData, setFormData] = useState(() => ({ ...defaultProfile }))
   const [savedProfile, setSavedProfile] = useState(() => ({ ...defaultProfile }))
@@ -1040,6 +1041,7 @@ export default function Profile() {
               </div>
             </div>
           </form>
+          <AccountDangerZone onAccountDeleted={onAccountDeleted} />
         </div>}
       </section>
     </AppLayout>

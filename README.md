@@ -9,6 +9,7 @@ CocoApp là nền tảng kết nối sinh viên theo nhu cầu thực tế: họ
 - Khám phá sinh viên theo mục tiêu và phạm vi khu vực gần đúng, không thu GPS.
 - Lưu hồ sơ riêng tư để xem lại mà không thông báo cho người được lưu.
 - Tạm dừng kết nối mới để ẩn hồ sơ khỏi Khám phá mà vẫn giữ hội thoại hiện có.
+- Tự xoá tài khoản bằng xác nhận nhiều bước; dữ liệu gắn với tài khoản được xoá theo cascade.
 - Sao chép lời mời tham gia CocoApp từ trạng thái Khám phá chưa có người dùng khác.
 - Gửi, chấp nhận, từ chối, hủy và ngắt kết nối.
 - Thông báo Realtime với trạng thái đã đọc.
@@ -53,6 +54,7 @@ Chạy migrations theo đúng thứ tự trong `supabase/migrations`:
 19. `20260917000018_enforce_connection_readiness.sql`
 20. `20260917000019_create_saved_profiles.sql`
 21. `20260917000020_add_connection_pause.sql`
+22. `20260917000021_add_self_service_account_deletion.sql`
 
 Không chỉnh sửa migration đã chạy. Mọi thay đổi schema tiếp theo phải nằm trong migration mới.
 

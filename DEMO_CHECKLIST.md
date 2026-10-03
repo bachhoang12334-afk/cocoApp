@@ -4,7 +4,7 @@ Checklist này giúp chuẩn bị một buổi demo ngắn, có dữ liệu th�
 
 ## 1. Trước buổi demo
 
-- Chạy đủ migrations từ `20260917000000` đến `20260917000020` trên đúng Supabase project.
+- Chạy đủ migrations từ `20260917000000` đến `20260917000021` trên đúng Supabase project.
 - Xác nhận `.env.local` chỉ có `VITE_SUPABASE_URL` và `VITE_SUPABASE_PUBLISHABLE_KEY`; không dùng service role key.
 - Chuẩn bị ít nhất hai tài khoản đã xác nhận email.
 - Hoàn thiện chín trường bắt buộc ở cả hai hồ sơ: họ tên, trường, ngành, năm học, giới tính, mục tiêu, tỉnh/thành phố, khu vực và phạm vi kết nối.
@@ -25,6 +25,7 @@ npm.cmd run check
 6. **Coco Plan:** đề xuất một bước tiếp theo, chấp nhận và giải thích quy tắc hoàn thành theo thời gian.
 7. **Quyền riêng tư chủ động:** tắt “Nhận kết nối mới”, cho thấy hồ sơ được ẩn khỏi Khám phá nhưng hội thoại hiện có vẫn giữ nguyên; sau đó bật lại.
 8. **An toàn:** mở menu chặn/báo cáo, giải thích dữ liệu báo cáo riêng tư; không cần tạo báo cáo giả nếu dữ liệu demo cần giữ sạch.
+9. **Quyền dữ liệu:** mở hộp thoại xoá tài khoản để trình bày câu xác nhận và hậu quả; đóng hộp thoại bằng “Giữ tài khoản”, không xoá tài khoản demo.
 
 ## 3. Dữ liệu demo tối thiểu
 

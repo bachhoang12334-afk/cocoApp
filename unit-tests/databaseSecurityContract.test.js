@@ -62,6 +62,10 @@ const connectionPauseMigration = await readFile(
   new URL('../supabase/migrations/20260917000020_add_connection_pause.sql', import.meta.url),
   'utf8'
 )
+const accountDeletionMigration = await readFile(
+  new URL('../supabase/migrations/20260917000021_add_self_service_account_deletion.sql', import.meta.url),
+  'utf8'
+)
 const connectionPlansMigration = await readFile(
   new URL('../supabase/migrations/20260917000012_create_connection_plans.sql', import.meta.url),
   'utf8'
@@ -194,6 +198,27 @@ test('pausing new connections is enforced for discovery, requests, and new saves
   assert.match(
     connectionPauseMigration,
     /revoke all on function public\.can_start_new_connections\(uuid\)[\s\S]*from public, anon, authenticated;/
+  )
+})
+
+test('self-service account deletion can remove only the authenticated caller', () => {
+  const deletionFunction = accountDeletionMigration.match(
+    /create or replace function public\.delete_my_account\(\)[\s\S]*?\$\$;/
+  )?.[0] || ''
+
+  assert.match(deletionFunction, /security definer/)
+  assert.match(deletionFunction, /set search_path = ''/)
+  assert.match(deletionFunction, /current_user_id uuid := auth\.uid\(\)/)
+  assert.match(deletionFunction, /delete from auth\.users as auth_user/)
+  assert.match(deletionFunction, /where auth_user\.id = current_user_id/)
+  assert.doesNotMatch(deletionFunction, /delete_my_account\([^)]*(?:uuid|text)/)
+  assert.match(
+    accountDeletionMigration,
+    /revoke all on function public\.delete_my_account\(\)[\s\S]*from public, anon, authenticated;/
+  )
+  assert.match(
+    accountDeletionMigration,
+    /grant execute on function public\.delete_my_account\(\) to authenticated;/
   )
 })
 

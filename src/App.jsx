@@ -222,7 +222,11 @@ export default function App() {
 
         <Route
           path="/profile"
-          element={protectedPage(<Profile />, account, isCheckingSession)}
+          element={protectedPage(
+            <Profile onAccountDeleted={() => setAccount(null)} />,
+            account,
+            isCheckingSession
+          )}
         />
 
         <Route
