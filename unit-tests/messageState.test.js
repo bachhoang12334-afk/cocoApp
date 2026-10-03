@@ -2,6 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   applyReadReceipts,
+  formatMessageTimestamp,
+  getLatestOwnMessageId,
+  getMessageDeliveryLabel,
   getUnreadMessageCount,
   mapMessage,
   mergeMessages,
@@ -44,6 +47,49 @@ test('counts only unread messages received from the other participant', () => {
 
   assert.equal(getUnreadMessageCount(connection), 1)
   assert.equal(getUnreadMessageCount({ ...connection, unreadCount: 72 }), 72)
+})
+
+test('formats valid message times and keeps older dates understandable', () => {
+  const sameDay = formatMessageTimestamp(
+    '2026-09-18T01:05:00.000Z',
+    '2026-09-18T08:00:00.000Z'
+  )
+  const olderDay = formatMessageTimestamp(
+    '2026-09-17T01:05:00.000Z',
+    '2026-09-18T08:00:00.000Z'
+  )
+  const olderYear = formatMessageTimestamp(
+    '2025-09-17T01:05:00.000Z',
+    '2026-09-18T08:00:00.000Z'
+  )
+
+  assert.match(sameDay, /\d{2}:\d{2}/)
+  assert.match(olderDay, /\d{2}[/-]\d{2}.*\d{2}:\d{2}/)
+  assert.match(olderYear, /2025.*\d{2}:\d{2}/)
+  assert.equal(formatMessageTimestamp('not-a-date'), '')
+})
+
+test('shows a delivery receipt only for the latest outgoing message', () => {
+  const messages = [
+    mapMessage(row({ id: 'message-1', sender_id: userId }), userId),
+    mapMessage(row({ id: 'message-2' }), userId),
+    mapMessage(row({
+      id: 'message-3',
+      sender_id: userId,
+      read_at: '2026-09-18T02:00:00.000Z',
+    }), userId),
+  ]
+  const latestOwnMessageId = getLatestOwnMessageId(messages)
+
+  assert.equal(latestOwnMessageId, 'message-3')
+  assert.equal(getMessageDeliveryLabel(messages[0], latestOwnMessageId), '')
+  assert.equal(getMessageDeliveryLabel(messages[1], latestOwnMessageId), '')
+  assert.equal(getMessageDeliveryLabel(messages[2], latestOwnMessageId), 'Đã đọc')
+  assert.equal(
+    getMessageDeliveryLabel({ ...messages[2], readAt: null }, latestOwnMessageId),
+    'Đã gửi'
+  )
+  assert.equal(getLatestOwnMessageId([]), null)
 })
 
 test('merges realtime and fetched messages once while preserving read receipts', () => {

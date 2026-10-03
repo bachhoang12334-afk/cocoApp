@@ -3554,6 +3554,37 @@ textarea:focus-visible {
   border-bottom-left-radius: 4px;
 }
 
+.chat-message-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 5px;
+  color: var(--coco-muted);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.chat-message.from-me .chat-message-meta {
+  color: #d9eff0;
+}
+
+.chat-delivery-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chat-delivery-status::before {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  content: '';
+}
+
 .chat-composer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

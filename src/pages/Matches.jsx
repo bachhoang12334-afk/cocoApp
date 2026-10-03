@@ -5,6 +5,9 @@ import { getCurrentAccount } from '../auth'
 import { useConnectionRequestRefresh } from '../hooks/useConnectionRequestRefresh'
 import {
   applyReadReceipts,
+  formatMessageTimestamp,
+  getLatestOwnMessageId,
+  getMessageDeliveryLabel,
   getUnreadMessageCount,
   mapMessage,
   mergeMessages,
@@ -717,6 +720,9 @@ export default function Matches() {
   const chat = connections.find(
     (item) => item.id === chatId && item.status === 'accepted'
   )
+  const latestOwnMessageId = chat
+    ? getLatestOwnMessageId(chat.messages)
+    : null
   const deepLinkConnection = deepLinkConnectionId
     ? connections.find((item) => item.id === deepLinkConnectionId)
     : null
@@ -1829,17 +1835,36 @@ export default function Matches() {
                     </div>
                   )}
 
-                  {chat.messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`chat-message ${message.sender === 'me' ? 'from-me' : 'from-other'}`}
-                    >
-                      <strong>
-                        {message.sender === 'me' ? 'Cậu' : chat.name}
-                      </strong>
-                      <div>{message.text}</div>
-                    </div>
-                  ))}
+                  {chat.messages.map((message) => {
+                    const deliveryLabel = getMessageDeliveryLabel(
+                      message,
+                      latestOwnMessageId
+                    )
+                    const timestampLabel = formatMessageTimestamp(message.createdAt)
+
+                    return (
+                      <article
+                        key={message.id}
+                        className={`chat-message ${message.sender === 'me' ? 'from-me' : 'from-other'}`}
+                        aria-label={`Tin nhắn của ${message.sender === 'me' ? 'cậu' : chat.name}`}
+                      >
+                        <strong aria-hidden="true">
+                          {message.sender === 'me' ? 'Cậu' : chat.name}
+                        </strong>
+                        <div>{message.text}</div>
+                        <footer className="chat-message-meta">
+                          {timestampLabel && (
+                            <time dateTime={message.createdAt}>{timestampLabel}</time>
+                          )}
+                          {deliveryLabel && (
+                            <span className="chat-delivery-status">
+                              {deliveryLabel}
+                            </span>
+                          )}
+                        </footer>
+                      </article>
+                    )
+                  })}
                 </div>
 
                 <form className="chat-composer" onSubmit={sendMessage}>
