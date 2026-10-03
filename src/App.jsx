@@ -16,6 +16,7 @@ import './App.css'
 import './ProductV2.css'
 
 const Login = lazy(() => import('./pages/Login'))
+const Landing = lazy(() => import('./pages/Landing'))
 const Register = lazy(() => import('./pages/Register'))
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
@@ -191,7 +192,12 @@ export default function App() {
           <Routes>
         <Route
           path="/"
-          element={<Navigate to="/dashboard" replace />}
+          element={(
+            <Landing
+              account={account}
+              isCheckingSession={isCheckingSession}
+            />
+          )}
         />
 
         <Route
