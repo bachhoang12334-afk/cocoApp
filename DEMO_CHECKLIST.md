@@ -25,7 +25,7 @@ npm.cmd run check
 6. **Coco Plan:** đề xuất một bước tiếp theo, chấp nhận và giải thích quy tắc hoàn thành theo thời gian.
 7. **Quyền riêng tư chủ động:** tắt “Nhận kết nối mới”, cho thấy hồ sơ được ẩn khỏi Khám phá nhưng hội thoại hiện có vẫn giữ nguyên; sau đó bật lại.
 8. **Chống mất dữ liệu:** sửa thử một trường ở Hồ sơ rồi mở mục khác; chọn “Ở lại chỉnh sửa” trong cảnh báo thay đổi chưa lưu và lưu hồ sơ trước khi tiếp tục.
-9. **Mất mạng an toàn:** tắt mạng tạm thời, chỉ ra banner ngoại tuyến không che nội dung và không tự tải lại trang; bật mạng để thấy xác nhận kết nối lại tự biến mất.
+9. **Mất mạng an toàn:** tắt mạng tạm thời, chỉ ra banner ngoại tuyến không che nội dung và trang Kết nối vẫn giữ dữ liệu gần nhất; bật mạng để thấy xác nhận kết nối lại và dữ liệu tự đồng bộ.
 10. **An toàn:** mở menu chặn/báo cáo, giải thích dữ liệu báo cáo riêng tư; không cần tạo báo cáo giả nếu dữ liệu demo cần giữ sạch.
 11. **Quyền dữ liệu:** chỉ ra nút tải bản sao JSON; mở hộp thoại xoá tài khoản để trình bày câu xác nhận và hậu quả, sau đó đóng bằng “Giữ tài khoản”, không xoá tài khoản demo.
 

@@ -63,6 +63,14 @@ import {
   prepareMessageImage,
 } from '../lib/messageImages'
 import PrivateMessageImage from '../components/PrivateMessageImage'
+import {
+  getConnectionLoadErrorMessage,
+  getConnectionRefreshWarning,
+} from '../lib/connectionRefreshFeedback'
+import {
+  NETWORK_STATUS_RESTORED,
+  useNetworkStatus,
+} from '../lib/networkStatus'
 
 const purposeLabels = {
   study_group: 'Học nhóm',
@@ -116,14 +124,6 @@ function mapRequest(request, userId, messagePagesByRequest, plansByRequest) {
     unreadCount: messagePage?.unreadCount || 0,
     plan: plansByRequest.get(request.id) || null,
   }
-}
-
-function getMatchesErrorMessage(error) {
-  if (error?.message?.toLowerCase().includes('row-level security')) {
-    return 'Không thể tải hoặc cập nhật lời mời do quyền truy cập. Hãy đăng nhập lại.'
-  }
-
-  return 'Không thể tải danh sách kết nối. Hãy thử lại sau.'
 }
 
 function getMessageErrorMessage(error) {
@@ -339,6 +339,7 @@ async function fetchLinkedCocoPlan(connectionRequestId, planId, userId) {
 
 export default function Matches() {
   const location = useLocation()
+  const networkStatus = useNetworkStatus()
   const planDeepLink = parseCocoPlanDeepLink(location.search)
   const deepLinkConnectionId = planDeepLink?.connectionId ?? null
   const deepLinkPlanId = planDeepLink?.planId ?? null
@@ -357,7 +358,9 @@ export default function Matches() {
   const [connections, setConnections] = useState([])
   const [error, setError] = useState('')
   const [loadError, setLoadError] = useState('')
+  const [refreshWarning, setRefreshWarning] = useState('')
   const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshingSnapshot, setIsRefreshingSnapshot] = useState(false)
   const [actionId, setActionId] = useState(null)
   const [tab, setTab] = useState(matchesOverviewTab || 'pending')
   const [chatId, setChatId] = useState(null)
@@ -640,6 +643,7 @@ export default function Matches() {
 
         hasLoadedConnectionsRef.current = true
         setLoadError('')
+        setRefreshWarning('')
         setError('')
 
         if (
@@ -683,7 +687,7 @@ export default function Matches() {
           refreshConnectionsQueuedRef.current = false
           void runRefreshConnections().catch((loadError) => {
             if (matchesMountedRef.current) {
-              setError(getMatchesErrorMessage(loadError))
+              setRefreshWarning(getConnectionRefreshWarning(loadError))
             }
           })
         }
@@ -696,11 +700,10 @@ export default function Matches() {
   useConnectionRequestRefresh(refreshConnections, {
     onError: (loadError) => {
       if (matchesMountedRef.current) {
-        const message = getMatchesErrorMessage(loadError)
         if (hasLoadedConnectionsRef.current) {
-          setError(`Chưa làm mới được kết nối. ${message}`)
+          setRefreshWarning(getConnectionRefreshWarning(loadError))
         } else {
-          setLoadError(message)
+          setLoadError(getConnectionLoadErrorMessage(loadError))
         }
       }
     },
@@ -714,10 +717,34 @@ export default function Matches() {
       await refreshConnections()
     } catch (refreshError) {
       if (matchesMountedRef.current) {
-        setLoadError(getMatchesErrorMessage(refreshError))
+        setLoadError(getConnectionLoadErrorMessage(refreshError))
       }
     }
   }
+
+  const retryConnectionRefresh = useCallback(async () => {
+    setIsRefreshingSnapshot(true)
+    setRefreshWarning('')
+
+    try {
+      await refreshConnections()
+    } catch (refreshError) {
+      if (matchesMountedRef.current) {
+        setRefreshWarning(getConnectionRefreshWarning(refreshError))
+      }
+    } finally {
+      if (matchesMountedRef.current) setIsRefreshingSnapshot(false)
+    }
+  }, [refreshConnections])
+
+  useEffect(() => {
+    if (
+      networkStatus !== NETWORK_STATUS_RESTORED
+      || !hasLoadedConnectionsRef.current
+    ) return
+
+    void retryConnectionRefresh()
+  }, [networkStatus, retryConnectionRefresh])
 
   useEffect(() => {
     let matchesChannel = null
@@ -825,7 +852,7 @@ export default function Matches() {
 
                 void refreshConnections().catch((loadError) => {
                   if (matchesMountedRef.current) {
-                    setError(getMatchesErrorMessage(loadError))
+                    setRefreshWarning(getConnectionRefreshWarning(loadError))
                   }
                 })
               }
@@ -845,7 +872,7 @@ export default function Matches() {
 
               void refreshConnections().catch((loadError) => {
                 if (matchesMountedRef.current) {
-                  setError(getPlanErrorMessage(loadError))
+                  setRefreshWarning(getConnectionRefreshWarning(loadError))
                 }
               })
             }
@@ -853,12 +880,16 @@ export default function Matches() {
           .subscribe((status) => {
             if (status === 'SUBSCRIBED') {
               void refreshConnections().catch((loadError) => {
-                if (matchesMountedRef.current) setError(getMatchesErrorMessage(loadError))
+                if (matchesMountedRef.current) {
+                  setRefreshWarning(getConnectionRefreshWarning(loadError))
+                }
               })
             }
           })
       } catch (loadError) {
-        if (matchesMountedRef.current) setError(getMatchesErrorMessage(loadError))
+        if (matchesMountedRef.current) {
+          setRefreshWarning(getConnectionRefreshWarning(loadError))
+        }
       }
     }
 
@@ -1187,6 +1218,7 @@ export default function Matches() {
         setConnections((current) => mergeConnections(nextConnections, current))
         hasLoadedConnectionsRef.current = true
         setLoadError('')
+        setRefreshWarning('')
         setError('')
         handledConnectionDeepLinkRef.current = connectionNotificationDeepLinkKey
         pendingConnectionFocusRef.current = null
@@ -1409,7 +1441,7 @@ export default function Matches() {
       if (status === 'cancelled' && chatId === id) closeChat()
       if (status === 'accepted') setTab('accepted')
     } catch (updateError) {
-      setError(getMatchesErrorMessage(updateError))
+      setError(getConnectionLoadErrorMessage(updateError))
     } finally {
       setActionId(null)
     }
@@ -1932,6 +1964,31 @@ export default function Matches() {
           <div className="form-error-banner" role="alert">
             {error}
           </div>
+        )}
+
+        {refreshWarning && !loadError && (
+          <section
+            className="matches-refresh-warning"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            <span className="matches-refresh-warning-icon" aria-hidden="true">
+              <Icon name="connection" />
+            </span>
+            <span className="matches-refresh-warning-copy">
+              <strong>Đang dùng dữ liệu gần nhất</strong>
+              <span>{refreshWarning}</span>
+            </span>
+            <button
+              type="button"
+              disabled={isRefreshingSnapshot}
+              aria-busy={isRefreshingSnapshot}
+              onClick={() => void retryConnectionRefresh()}
+            >
+              {isRefreshingSnapshot ? 'Đang đồng bộ…' : 'Thử đồng bộ lại'}
+            </button>
+          </section>
         )}
 
         {statusMessage && (
