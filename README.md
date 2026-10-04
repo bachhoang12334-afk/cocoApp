@@ -87,6 +87,8 @@ npm.cmd run check
 
 Lệnh này chạy tuần tự lint, unit tests, production build và `git diff --check`.
 
+Mỗi lần push hoặc mở pull request, GitHub Actions tự chạy `npm ci` và quality gate này trên Node.js 24. Các lượt chạy mới trên cùng một nhánh sẽ hủy lượt cũ để tránh tốn tài nguyên.
+
 Playwright là bộ kiểm thử riêng và không nằm trong checkpoint mặc định.
 
 Khi chuẩn bị thuyết trình, dùng [DEMO_CHECKLIST.md](./DEMO_CHECKLIST.md) để kiểm tra dữ liệu và đi theo kịch bản demo 5–7 phút.
