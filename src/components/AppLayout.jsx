@@ -14,6 +14,7 @@ import {
   NOTIFICATION_FILTER_UNREAD,
 } from '../lib/notificationPresentation'
 import { supabase } from '../lib/supabaseClient'
+import NetworkStatusBanner from './NetworkStatusBanner'
 
 const notificationCopy = {
   request_received: 'đã gửi cho cậu một lời mời kết nối.',
@@ -843,6 +844,8 @@ export default function AppLayout({ children, beforeLogout, onLogoutFailure }) {
             </Link>
           </div>
         </header>
+
+        <NetworkStatusBanner />
 
         {logoutError && (
           <div className="shell-status-message" role="alert" aria-live="assertive">

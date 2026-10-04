@@ -6546,6 +6546,83 @@ textarea:focus-visible {
   }
 }
 
+/* Honest, non-blocking connectivity feedback */
+.network-status-banner {
+  position: sticky;
+  z-index: 29;
+  top: 78px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  margin: 0 clamp(28px, 4vw, 58px);
+  padding: 10px 14px;
+  border: 1px solid transparent;
+  border-top: 0;
+  border-radius: 0 0 16px 16px;
+  box-shadow: 0 12px 28px rgba(28, 32, 57, .1);
+}
+
+.network-status-banner.is-offline {
+  color: #7c3507;
+  border-color: #fed7aa;
+  background: rgba(255, 247, 237, .97);
+}
+
+.network-status-banner.is-restored {
+  color: #126147;
+  border-color: #a7f3d0;
+  background: rgba(236, 253, 245, .97);
+}
+
+.network-status-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 11px;
+  background: currentColor;
+}
+
+.network-status-icon svg {
+  width: 19px;
+  height: 19px;
+  color: #fff;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.network-status-copy,
+.network-status-copy > span {
+  display: block;
+  min-width: 0;
+}
+
+.network-status-copy strong {
+  display: block;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.network-status-copy > span {
+  margin-top: 2px;
+  color: inherit;
+  font-size: 11px;
+  line-height: 1.45;
+  opacity: .86;
+}
+
+@media (max-width: 760px) {
+  .network-status-banner {
+    top: 64px;
+    min-height: 58px;
+    margin-inline: 15px;
+  }
+}
+
 @media (max-width: 760px) {
   .sidebar-toggle {
     display: none;
