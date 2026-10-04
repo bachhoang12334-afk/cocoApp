@@ -3596,6 +3596,25 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 
+.conversation-item-meta {
+  display: grid;
+  justify-items: end;
+  gap: 7px;
+  min-width: 42px;
+}
+
+.conversation-item-meta time {
+  color: var(--coco-muted);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.conversation-item.has-unread .conversation-item-meta time {
+  color: var(--coco-primary-dark);
+  font-weight: 750;
+}
+
 .conversation-item.has-unread .conversation-item-copy strong {
   font-weight: 850;
 }

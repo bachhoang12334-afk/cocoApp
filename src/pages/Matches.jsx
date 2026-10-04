@@ -41,7 +41,12 @@ import {
   TYPING_HEARTBEAT_MS,
   TYPING_IDLE_MS,
 } from '../lib/typingState'
-import { filterConversations } from '../lib/conversationFilters'
+import {
+  filterConversations,
+  formatConversationActivityTime,
+  getConversationActivityDate,
+  sortConversationsByActivity,
+} from '../lib/conversationFilters'
 
 const purposeLabels = {
   study_group: 'Học nhóm',
@@ -78,6 +83,8 @@ function mapRequest(request, userId, messagePagesByRequest, plansByRequest) {
     isIncoming,
     requesterId: request.requester_id,
     recipientId: request.recipient_id,
+    createdAt: request.created_at,
+    respondedAt: request.responded_at,
     messages: messagePage?.messages || [],
     hasOlderMessages: messagePage?.hasOlder || false,
     unreadCount: messagePage?.unreadCount || 0,
@@ -895,7 +902,8 @@ export default function Matches() {
   const acceptedConnections = connections.filter(
     (item) => item.status === 'accepted'
   )
-  const filteredAcceptedConnections = filterConversations(acceptedConnections, {
+  const activityOrderedConnections = sortConversationsByActivity(acceptedConnections)
+  const filteredAcceptedConnections = filterConversations(activityOrderedConnections, {
     query: conversationQuery,
     unreadOnly: showUnreadOnly,
   })
@@ -1922,6 +1930,8 @@ export default function Matches() {
                 {filteredAcceptedConnections.map((item) => {
                   const lastMessage = item.messages[item.messages.length - 1]
                   const unreadCount = getUnreadMessageCount(item)
+                  const activityDate = getConversationActivityDate(item)
+                  const activityLabel = formatConversationActivityTime(item)
 
                   return (
                     <button
@@ -1940,11 +1950,16 @@ export default function Matches() {
                         <strong>{item.name}</strong>
                         <small>{lastMessage?.text || item.purpose || 'Sẵn sàng trò chuyện'}</small>
                       </span>
-                      {unreadCount > 0 && (
-                        <span className="conversation-unread-badge" aria-hidden="true">
-                          {unreadCount > 99 ? '99+' : unreadCount}
-                        </span>
-                      )}
+                      <span className="conversation-item-meta">
+                        {activityDate && activityLabel && (
+                          <time dateTime={activityDate.toISOString()}>{activityLabel}</time>
+                        )}
+                        {unreadCount > 0 && (
+                          <span className="conversation-unread-badge" aria-hidden="true">
+                            {unreadCount > 99 ? '99+' : unreadCount}
+                          </span>
+                        )}
+                      </span>
                     </button>
                   )
                 })}
