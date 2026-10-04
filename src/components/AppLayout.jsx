@@ -7,6 +7,12 @@ import {
   isCocoPlanNotification,
 } from '../lib/notificationNavigation'
 import { normalizeNotifications } from '../lib/profileAccess'
+import {
+  filterNotifications,
+  formatNotificationTime,
+  NOTIFICATION_FILTER_ALL,
+  NOTIFICATION_FILTER_UNREAD,
+} from '../lib/notificationPresentation'
 import { supabase } from '../lib/supabaseClient'
 
 const notificationCopy = {
@@ -25,17 +31,6 @@ const notificationCopy = {
 function getNotificationMessage(notification) {
   const actorName = notification.actor?.full_name?.trim() || 'Một sinh viên'
   return `${actorName} ${notificationCopy[notification.type] || 'đã cập nhật kết nối với cậu.'}`
-}
-
-function formatNotificationTime(value) {
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) return ''
-
-  return new Intl.DateTimeFormat('vi-VN', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  }).format(date)
 }
 
 function getAuthProfileName(user) {
@@ -133,6 +128,7 @@ export default function AppLayout({ children }) {
   const [notifications, setNotifications] = useState([])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [notificationsLoading, setNotificationsLoading] = useState(true)
+  const [notificationFilter, setNotificationFilter] = useState(NOTIFICATION_FILTER_ALL)
   const [notificationsLoadError, setNotificationsLoadError] = useState('')
   const [notificationActionFeedback, setNotificationActionFeedback] = useState('')
   const [notificationTransportFeedback, setNotificationTransportFeedback] = useState('')
@@ -146,6 +142,7 @@ export default function AppLayout({ children }) {
   const unreadNotificationCount = notifications.filter(
     (notification) => notification.read_at === null
   ).length
+  const visibleNotifications = filterNotifications(notifications, notificationFilter)
 
   useEffect(() => {
     try {
@@ -765,7 +762,32 @@ export default function AppLayout({ children }) {
                     <p className="notification-error" role="alert">{notificationActionFeedback}</p>
                   )}
 
-                  <div className="notification-list" aria-busy={notificationsLoading}>
+                  {!notificationsLoadError && !notificationsLoading && notifications.length > 0 && (
+                    <div className="notification-filters" role="group" aria-label="Lọc thông báo">
+                      <button
+                        type="button"
+                        className={notificationFilter === NOTIFICATION_FILTER_ALL ? 'is-active' : ''}
+                        aria-pressed={notificationFilter === NOTIFICATION_FILTER_ALL}
+                        onClick={() => setNotificationFilter(NOTIFICATION_FILTER_ALL)}
+                      >
+                        Tất cả <span>{notifications.length}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={notificationFilter === NOTIFICATION_FILTER_UNREAD ? 'is-active' : ''}
+                        aria-pressed={notificationFilter === NOTIFICATION_FILTER_UNREAD}
+                        onClick={() => setNotificationFilter(NOTIFICATION_FILTER_UNREAD)}
+                      >
+                        Chưa đọc <span>{unreadNotificationCount}</span>
+                      </button>
+                    </div>
+                  )}
+
+                  <div
+                    id="notification-filter-panel"
+                    className="notification-list"
+                    aria-busy={notificationsLoading}
+                  >
                     {notificationsLoading ? (
                       <p className="notification-empty" role="status">Đang tải thông báo…</p>
                     ) : notificationsLoadError ? (
@@ -781,7 +803,9 @@ export default function AppLayout({ children }) {
                       </div>
                     ) : notifications.length === 0 ? (
                       <p className="notification-empty">Chưa có thông báo mới.</p>
-                    ) : notifications.map((notification) => (
+                    ) : visibleNotifications.length === 0 ? (
+                      <p className="notification-empty">Không còn thông báo chưa đọc.</p>
+                    ) : visibleNotifications.map((notification) => (
                       <button
                         key={notification.id}
                         type="button"
@@ -793,7 +817,9 @@ export default function AppLayout({ children }) {
                         </span>
                         <span className="notification-item-copy">
                           <strong>{getNotificationMessage(notification)}</strong>
-                          <small>{formatNotificationTime(notification.created_at)}</small>
+                          <time dateTime={notification.created_at}>
+                            {formatNotificationTime(notification.created_at)}
+                          </time>
                         </span>
                         {notification.read_at === null && (
                           <span className="notification-unread-dot">

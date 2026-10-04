@@ -20,7 +20,7 @@ npm.cmd run check
 1. **Trang chủ, tin cậy và Tổng quan:** mở `/` để giới thiệu nhanh ba nhu cầu; mở Trung tâm tin cậy để chỉ ra quyền dữ liệu và tiêu chuẩn cộng đồng, sau đó vào Coco Compass.
 2. **Khám phá:** cho xem Coco Fit, vị trí gần đúng, tín hiệu tin cậy và giải thích rằng app không thu GPS hay công khai số nhà.
 3. **Đã lưu:** lưu một hồ sơ, bật bộ lọc “Đã lưu”, rồi bỏ lưu để chứng minh shortlist là riêng tư và không gửi notification.
-4. **Kết nối có mục đích:** gửi lời mời kèm lời nhắn; tài khoản thứ hai chấp nhận.
+4. **Kết nối có mục đích:** gửi lời mời kèm lời nhắn; tài khoản thứ hai chấp nhận, sau đó mở chuông và bật “Chưa đọc” để chỉ ra thông báo mới cùng mốc thời gian hoạt động.
 5. **Tin nhắn Realtime:** tìm một hội thoại, bật lọc “Chưa đọc”, gõ một đoạn nháp rồi chuyển hội thoại và quay lại để chứng minh nháp được giữ trong tab; tiếp tục gõ ở một phía để chỉ ra trạng thái đang nhập tạm thời, sau đó dùng `Ctrl/Cmd + Enter` để gửi; chỉ ra trạng thái đã gửi/đã đọc và hội thoại vừa nhận tin được đưa lên đầu.
 6. **Coco Plan:** đề xuất một bước tiếp theo, chấp nhận và giải thích quy tắc hoàn thành theo thời gian.
 7. **Quyền riêng tư chủ động:** tắt “Nhận kết nối mới”, cho thấy hồ sơ được ẩn khỏi Khám phá nhưng hội thoại hiện có vẫn giữ nguyên; sau đó bật lại.

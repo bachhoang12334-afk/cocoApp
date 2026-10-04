@@ -4277,6 +4277,55 @@ textarea:focus-visible {
   line-height: 1.45;
 }
 
+.notification-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--coco-line);
+  background: #fbfcfc;
+}
+
+.notification-filters button {
+  display: inline-flex;
+  flex: 1 1 130px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 8px 12px;
+  color: var(--coco-muted);
+  border: 1px solid #dce5e7;
+  border-radius: 12px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.notification-filters button span {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  color: inherit;
+  border-radius: 999px;
+  background: #edf2f3;
+  font-size: 10px;
+}
+
+.notification-filters button.is-active {
+  color: var(--coco-primary-dark);
+  border-color: #a9d7cf;
+  background: #eaf7f4;
+}
+
+.notification-filters button.is-active span {
+  color: #fff;
+  background: var(--coco-primary);
+}
+
 .notification-list {
   max-height: min(480px, calc(100dvh - 160px));
   overflow-y: auto;
@@ -4311,6 +4360,7 @@ textarea:focus-visible {
 
 .notification-item:focus-visible,
 .notification-mark-all:focus-visible,
+.notification-filters button:focus-visible,
 .notification-menu .topbar-icon-button:focus-visible {
   z-index: 1;
   outline: 3px solid var(--coco-focus);
@@ -4341,7 +4391,7 @@ textarea:focus-visible {
 }
 
 .notification-item-copy strong,
-.notification-item-copy small {
+.notification-item-copy time {
   display: block;
 }
 
@@ -4351,7 +4401,7 @@ textarea:focus-visible {
   line-height: 1.45;
 }
 
-.notification-item-copy small {
+.notification-item-copy time {
   margin-top: 5px;
   color: var(--coco-muted);
   font-size: 11px;
@@ -4411,7 +4461,7 @@ textarea:focus-visible {
   }
 
   .notification-list {
-    max-height: calc(100dvh - 176px - env(safe-area-inset-bottom));
+    max-height: calc(100dvh - 230px - env(safe-area-inset-bottom));
   }
 
   .notification-item {
