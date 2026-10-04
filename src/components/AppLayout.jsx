@@ -98,6 +98,16 @@ const mobileMenuItems = [
   { to: '/profile', icon: 'profile', label: 'Hồ sơ', hint: 'Thông tin của cậu' },
 ]
 
+const railMenuItems = [menuItems[0], menuItems[1], menuItems[5], menuItems[6]]
+const purposeMenuItems = [menuItems[2], menuItems[3], menuItems[4]]
+
+const workspaceTabs = [
+  { to: '/dashboard', label: 'Tổng quan' },
+  { to: '/discover', label: 'Khám phá' },
+  { to: '/matches', label: 'Kết nối' },
+  { to: '/profile', label: 'Hồ sơ' },
+]
+
 const pageTitles = {
   '/dashboard': 'Tổng quan',
   '/discover': 'Khám phá cộng đồng',
@@ -107,6 +117,65 @@ const pageTitles = {
   '/matches': 'Kết nối của bạn',
   '/safety': 'Trung tâm an toàn',
   '/profile': 'Hồ sơ cá nhân',
+}
+
+const pageContexts = {
+  '/dashboard': {
+    eyebrow: 'BẮT ĐẦU TỪ ĐÂY',
+    title: 'Kết nối có mục đích',
+    description: 'Chọn đúng nhu cầu trước khi tìm người để mỗi cuộc trò chuyện có một điểm bắt đầu rõ ràng.',
+    action: 'Khám phá cộng đồng',
+    to: '/discover',
+  },
+  '/discover': {
+    eyebrow: 'KHÁM PHÁ AN TOÀN',
+    title: 'Ưu tiên sự phù hợp',
+    description: 'Bộ lọc giúp cậu tìm người cùng mục tiêu mà không cần công khai vị trí chính xác.',
+    action: 'Chọn mục tiêu học nhóm',
+    to: '/study',
+  },
+  '/study': {
+    eyebrow: 'HỌC CÙNG NHAU',
+    title: 'Tìm một nhịp học chung',
+    description: 'So khớp môn học, thời gian và cách học trước khi gửi lời mời kết nối.',
+    action: 'Xem các kết nối',
+    to: '/matches',
+  },
+  '/team': {
+    eyebrow: 'LÀM DỰ ÁN',
+    title: 'Ghép đúng kỹ năng',
+    description: 'Tìm thành viên theo vai trò và mục tiêu để team bắt đầu với kỳ vọng rõ ràng.',
+    action: 'Xem các kết nối',
+    to: '/matches',
+  },
+  '/roommates': {
+    eyebrow: 'GHÉP TRỌ CÓ CHỌN LỌC',
+    title: 'Hiểu nhau trước khi ở cùng',
+    description: 'Chia sẻ khu vực và thói quen ở mức cậu thấy thoải mái, rồi mới quyết định kết nối.',
+    action: 'Xem nguyên tắc an toàn',
+    to: '/safety',
+  },
+  '/matches': {
+    eyebrow: 'KHÔNG GIAN RIÊNG',
+    title: 'Trò chuyện trong ngữ cảnh',
+    description: 'Tin nhắn và ảnh chỉ dành cho kết nối của cậu; hãy chia sẻ vừa đủ để cùng ra quyết định.',
+    action: 'Kiểm tra hồ sơ',
+    to: '/profile',
+  },
+  '/safety': {
+    eyebrow: 'QUYỀN KIỂM SOÁT',
+    title: 'An toàn luôn ở gần',
+    description: 'Cậu có thể chặn, báo cáo hoặc ngắt kết nối bất cứ lúc nào khi trải nghiệm không còn phù hợp.',
+    action: 'Đọc Trust Center',
+    to: '/trust',
+  },
+  '/profile': {
+    eyebrow: 'HỒ SƠ CỦA CẬU',
+    title: 'Chia sẻ có chủ đích',
+    description: 'Một hồ sơ rõ ràng giúp người phù hợp hiểu cậu, còn quyền riêng tư vẫn do cậu quyết định.',
+    action: 'Khám phá cộng đồng',
+    to: '/discover',
+  },
 }
 
 export default function AppLayout({ children, beforeLogout, onLogoutFailure }) {
@@ -140,6 +209,7 @@ export default function AppLayout({ children, beforeLogout, onLogoutFailure }) {
   const fullName = profileName.trim() || 'Sinh viên'
   const avatarLetter = fullName.split(/\s+/).pop()?.[0]?.toUpperCase() || 'S'
   const pageTitle = pageTitles[location.pathname] || 'CocoApp'
+  const pageContext = pageContexts[location.pathname] || pageContexts['/dashboard']
   const unreadNotificationCount = notifications.filter(
     (notification) => notification.read_at === null
   ).length
@@ -640,60 +710,89 @@ export default function AppLayout({ children, beforeLogout, onLogoutFailure }) {
 
   return (
     <div className={`app-shell product-shell ${sidebarCollapsed ? 'sidebar-is-collapsed' : 'sidebar-is-expanded'}`}>
-      <aside id="primary-sidebar" className="app-sidebar product-sidebar">
-        <Link to="/dashboard" className="app-brand product-brand" aria-label="CocoApp">
-          <span className="app-brand-icon">C</span>
-          <span className="app-brand-name">Coco<span>.</span></span>
-        </Link>
+      <a className="workspace-skip-link" href="#workspace-main">Bỏ qua điều hướng</a>
 
-        <div className="workspace-pill">
-          <span className="workspace-dot" />
-          <div>
-            <strong>Campus space</strong>
-            <span>Cộng đồng sinh viên</span>
+      <aside id="primary-sidebar" className="app-sidebar product-sidebar">
+        <div className="product-rail">
+          <Link to="/dashboard" className="rail-brand" aria-label="CocoApp — Tổng quan">
+            <span className="app-brand-icon">C</span>
+          </Link>
+
+          <nav className="rail-nav" aria-label="Điều hướng nhanh">
+            {railMenuItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) => `rail-link ${isActive ? 'active' : ''}`}
+                aria-label={`${item.label}${item.to === '/matches' && unreadMessageCount > 0 ? `, ${unreadMessageCount} tin nhắn chưa đọc` : ''}`}
+                title={item.label}
+              >
+                <Icon name={item.icon} />
+                {item.to === '/matches' && unreadMessageCount > 0 && (
+                  <span className="navigation-unread-badge" aria-hidden="true">
+                    {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                  </span>
+                )}
+              </NavLink>
+            ))}
+          </nav>
+
+          <div className="rail-bottom">
+            <NavLink to="/profile" className="rail-profile" aria-label={`Hồ sơ của ${fullName}`} title="Hồ sơ">
+              {avatarLetter}
+            </NavLink>
           </div>
         </div>
 
-        <p className="sidebar-label">ĐIỀU HƯỚNG</p>
+        <div id="workspace-panel" className="product-sidebar-panel">
+          <Link to="/dashboard" className="app-brand product-brand" aria-label="CocoApp">
+            <span className="app-brand-name">Coco<span>.</span></span>
+            <small>Campus workspace</small>
+          </Link>
 
-        <nav className="sidebar-nav" aria-label="Điều hướng chính">
-          {menuItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-              aria-label={`${item.label}${item.to === '/matches' && unreadMessageCount > 0 ? `, ${unreadMessageCount} tin nhắn chưa đọc` : ''}`}
-              title={sidebarCollapsed ? item.label : undefined}
-            >
-              <span className="sidebar-icon"><Icon name={item.icon}/></span>
-              <span className="sidebar-link-copy">
-                <strong>{item.label}</strong>
-                <small>{item.hint}</small>
-              </span>
-              {item.to === '/matches' && unreadMessageCount > 0 && (
-                <span className="navigation-unread-badge" aria-hidden="true">
-                  {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+          <div className="workspace-pill">
+            <span className="workspace-dot" />
+            <div>
+              <strong>Không gian của cậu</strong>
+              <span>Học tập · dự án · cuộc sống</span>
+            </div>
+          </div>
+
+          <p className="sidebar-label">MỤC TIÊU KẾT NỐI</p>
+
+          <nav className="sidebar-nav" aria-label="Mục tiêu kết nối">
+            {purposeMenuItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+              >
+                <span className="sidebar-icon"><Icon name={item.icon}/></span>
+                <span className="sidebar-link-copy">
+                  <strong>{item.label}</strong>
+                  <small>{item.hint}</small>
                 </span>
-              )}
+                <Icon name="arrow" />
+              </NavLink>
+            ))}
+          </nav>
+
+          <div className="sidebar-promo">
+            <span><Icon name="spark" /> GỢI Ý RIÊNG</span>
+            <strong>Hồ sơ rõ ràng giúp cậu gặp đúng người hơn.</strong>
+            <Link to="/profile">Hoàn thiện hồ sơ</Link>
+          </div>
+
+          <div className="sidebar-bottom">
+            <NavLink to="/profile" className="student-card sidebar-user-link">
+              <div className="student-avatar">{avatarLetter}</div>
+              <div><strong>{fullName}</strong><span>Quản lý hồ sơ</span></div>
             </NavLink>
-          ))}
-        </nav>
 
-        <div className="sidebar-promo">
-          <span><Icon name="spark" /> GỢI Ý</span>
-          <strong>Hồ sơ tốt tạo kết nối tốt hơn</strong>
-          <Link to="/profile">Hoàn thiện hồ sơ</Link>
-        </div>
-
-        <div className="sidebar-bottom">
-          <NavLink to="/profile" className="student-card sidebar-user-link">
-            <div className="student-avatar">{avatarLetter}</div>
-            <div><strong>{fullName}</strong><span>Xem hồ sơ</span></div>
-          </NavLink>
-
-          <a href="/login" className="logout-button" onClick={handleLogout} aria-label="Đăng xuất">
-            <Icon name="logout"/><span>Đăng xuất</span>
-          </a>
+            <a href="/login" className="logout-button" onClick={handleLogout} aria-label="Đăng xuất">
+              <Icon name="logout"/><span>Đăng xuất</span>
+            </a>
+          </div>
         </div>
       </aside>
 
@@ -703,8 +802,8 @@ export default function AppLayout({ children, beforeLogout, onLogoutFailure }) {
             <button
               type="button"
               className="sidebar-toggle"
-              aria-label={sidebarCollapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'}
-              aria-controls="primary-sidebar"
+              aria-label={sidebarCollapsed ? 'Mở bảng mục tiêu kết nối' : 'Thu gọn bảng mục tiêu kết nối'}
+              aria-controls="workspace-panel"
               aria-expanded={!sidebarCollapsed}
               onClick={() => setSidebarCollapsed((current) => !current)}
             >
@@ -716,6 +815,23 @@ export default function AppLayout({ children, beforeLogout, onLogoutFailure }) {
               <strong>{pageTitle}</strong>
             </div>
           </div>
+
+          <nav className="workspace-tabs" aria-label="Khu vực CocoApp">
+            {workspaceTabs.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) => isActive ? 'active' : ''}
+              >
+                {item.label}
+                {item.to === '/matches' && unreadMessageCount > 0 && (
+                  <span aria-label={`${unreadMessageCount} tin nhắn chưa đọc`}>
+                    {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                  </span>
+                )}
+              </NavLink>
+            ))}
+          </nav>
 
           <div className="topbar-actions">
             <span className="demo-status"><i /> Beta an toàn</span>
@@ -857,7 +973,58 @@ export default function AppLayout({ children, beforeLogout, onLogoutFailure }) {
           {notificationAnnouncement}
         </p>
 
-        <main ref={mainRef} className="app-content" tabIndex="-1">{children}</main>
+        <div className="product-workspace">
+          <main id="workspace-main" ref={mainRef} className="app-content" tabIndex="-1">{children}</main>
+
+          <aside className="product-context-panel" aria-label="Thông tin hỗ trợ">
+            <section className="context-primary-card">
+              <span>{pageContext.eyebrow}</span>
+              <h2>{pageContext.title}</h2>
+              <p>{pageContext.description}</p>
+              <Link to={pageContext.to}>
+                {pageContext.action}
+                <Icon name="arrow" />
+              </Link>
+            </section>
+
+            <section className="context-activity-card" aria-labelledby="context-activity-title">
+              <div className="context-section-heading">
+                <span><Icon name="bell" /></span>
+                <div>
+                  <small>NHỊP HOẠT ĐỘNG</small>
+                  <h2 id="context-activity-title">Cập nhật của cậu</h2>
+                </div>
+              </div>
+              <dl className="context-stat-list">
+                <div>
+                  <dt>Tin nhắn chưa đọc</dt>
+                  <dd>{unreadMessageCount > 99 ? '99+' : unreadMessageCount}</dd>
+                </div>
+                <div>
+                  <dt>Thông báo mới</dt>
+                  <dd>{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</dd>
+                </div>
+              </dl>
+              <Link to="/matches" className="context-quiet-link">Mở trung tâm kết nối</Link>
+            </section>
+
+            <section className="context-safety-card">
+              <span className="context-safety-icon"><Icon name="safety" /></span>
+              <div>
+                <small>CAM KẾT COCO</small>
+                <h2>Riêng tư theo mặc định</h2>
+                <p>Không hiển thị GPS chính xác. Ảnh trò chuyện dùng liên kết tạm thời.</p>
+                <Link to="/trust">Cách Coco bảo vệ dữ liệu</Link>
+              </div>
+            </section>
+          </aside>
+        </div>
+
+        <footer className="product-statusbar" aria-label="Trạng thái ứng dụng">
+          <span><i /> Kết nối bảo mật</span>
+          <span>CocoApp Beta · Quyền riêng tư do cậu kiểm soát</span>
+          <Link to="/trust">Trust Center</Link>
+        </footer>
       </div>
 
       <nav className="mobile-bottom-nav" aria-label="Điều hướng điện thoại">

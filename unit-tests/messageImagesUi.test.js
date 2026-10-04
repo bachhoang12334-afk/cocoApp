@@ -31,3 +31,14 @@ test('message images are normalized before upload and fetched with signed URLs o
   assert.match(privateImageSource, /createSignedUrl/)
   assert.doesNotMatch(`${matchesSource}\n${privateImageSource}`, /getPublicUrl/)
 })
+
+test('private message images open in an accessible in-app viewer', () => {
+  assert.match(privateImageSource, /role="dialog"/)
+  assert.match(privateImageSource, /aria-modal="true"/)
+  assert.match(privateImageSource, /event\.key === 'Escape'/)
+  assert.match(privateImageSource, /document\.body\.style\.overflow = 'hidden'/)
+  assert.match(privateImageSource, /triggerRef\.current\?\.focus/)
+  assert.match(privateImageSource, /aria-label="Đóng ảnh"/)
+  assert.match(privateImageSource, /aria-haspopup="dialog"/)
+  assert.doesNotMatch(privateImageSource, /target="_blank"/)
+})
