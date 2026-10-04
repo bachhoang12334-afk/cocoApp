@@ -108,6 +108,12 @@ const workspaceTabs = [
   { to: '/profile', label: 'Hồ sơ' },
 ]
 
+const quickJumpItems = [
+  ...menuItems,
+  { to: '/profile', icon: 'profile', label: 'Hồ sơ cá nhân', hint: 'Thông tin và quyền riêng tư', keywords: 'tài khoản cài đặt' },
+  { to: '/trust', icon: 'safety', label: 'Trust Center', hint: 'Dữ liệu và tiêu chuẩn cộng đồng', keywords: 'tin cậy điều khoản riêng tư' },
+]
+
 const pageTitles = {
   '/dashboard': 'Tổng quan',
   '/discover': 'Khám phá cộng đồng',
@@ -178,6 +184,144 @@ const pageContexts = {
   },
 }
 
+function normalizeNavigationQuery(value) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('vi')
+    .trim()
+}
+
+function WorkspaceQuickJump({ open, onClose, onSelect }) {
+  const dialogRef = useRef(null)
+  const inputRef = useRef(null)
+  const returnFocusRef = useRef(null)
+  const [query, setQuery] = useState('')
+  const normalizedQuery = normalizeNavigationQuery(query)
+  const visibleItems = quickJumpItems.filter((item) => (
+    normalizeNavigationQuery(`${item.label} ${item.hint} ${item.keywords || ''}`)
+      .includes(normalizedQuery)
+  ))
+
+  useEffect(() => {
+    if (!open) return undefined
+
+    returnFocusRef.current = document.activeElement
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const focusFrame = window.requestAnimationFrame(() => inputRef.current?.focus())
+
+    function handleDialogKeyDown(event) {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onClose()
+        return
+      }
+
+      if (event.key !== 'Tab' || !dialogRef.current) return
+
+      const focusable = Array.from(dialogRef.current.querySelectorAll(
+        'button:not([disabled]), input:not([disabled]), a[href]'
+      ))
+      if (focusable.length === 0) return
+
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleDialogKeyDown)
+
+    return () => {
+      window.cancelAnimationFrame(focusFrame)
+      document.removeEventListener('keydown', handleDialogKeyDown)
+      document.body.style.overflow = previousOverflow
+      returnFocusRef.current?.focus()
+    }
+  }, [open, onClose])
+
+  if (!open) return null
+
+  function handleSubmit(event) {
+    event.preventDefault()
+    if (visibleItems[0]) onSelect(visibleItems[0].to)
+  }
+
+  return (
+    <div
+      className="quick-jump-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
+    >
+      <section
+        ref={dialogRef}
+        className="quick-jump-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="quick-jump-title"
+      >
+        <form onSubmit={handleSubmit}>
+          <header className="quick-jump-header">
+            <span className="quick-jump-mark"><Icon name="discover" /></span>
+            <div>
+              <small>COCO WORKSPACE</small>
+              <h2 id="quick-jump-title">Cậu muốn đi đâu?</h2>
+            </div>
+            <button type="button" onClick={onClose} aria-label="Đóng bảng Đi nhanh">
+              <span aria-hidden="true">×</span>
+            </button>
+          </header>
+
+          <label className="quick-jump-search">
+            <Icon name="discover" />
+            <span className="notification-sr-only">Tìm khu vực trong CocoApp</span>
+            <input
+              ref={inputRef}
+              type="search"
+              value={query}
+              placeholder="Tìm Tổng quan, Học nhóm, Kết nối…"
+              aria-controls="quick-jump-results"
+              onChange={(event) => setQuery(event.target.value)}
+            />
+            <kbd>Enter</kbd>
+          </label>
+
+          <div id="quick-jump-results" className="quick-jump-results" aria-live="polite">
+            {visibleItems.length === 0 ? (
+              <div className="quick-jump-empty" role="status">
+                <strong>Không tìm thấy khu vực này.</strong>
+                <span>Thử “học nhóm”, “hồ sơ” hoặc “an toàn”.</span>
+              </div>
+            ) : visibleItems.map((item) => (
+              <button key={item.to} type="button" onClick={() => onSelect(item.to)}>
+                <span className="quick-jump-item-icon"><Icon name={item.icon} /></span>
+                <span>
+                  <strong>{item.label}</strong>
+                  <small>{item.hint}</small>
+                </span>
+                <Icon name="arrow" />
+              </button>
+            ))}
+          </div>
+
+          <footer className="quick-jump-footer">
+            <span><kbd>Tab</kbd> Duyệt các lựa chọn</span>
+            <span><kbd>Esc</kbd> Đóng</span>
+          </footer>
+        </form>
+      </section>
+    </div>
+  )
+}
+
 export default function AppLayout({ children, beforeLogout, onLogoutFailure }) {
   const location = useLocation()
   const navigate = useNavigate()
@@ -206,6 +350,7 @@ export default function AppLayout({ children, beforeLogout, onLogoutFailure }) {
   const [unreadMessageCount, setUnreadMessageCount] = useState(0)
   const [profileName, setProfileName] = useState('Sinh viên')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(getInitialSidebarState)
+  const [quickJumpOpen, setQuickJumpOpen] = useState(false)
   const fullName = profileName.trim() || 'Sinh viên'
   const avatarLetter = fullName.split(/\s+/).pop()?.[0]?.toUpperCase() || 'S'
   const pageTitle = pageTitles[location.pathname] || 'CocoApp'
@@ -222,6 +367,24 @@ export default function AppLayout({ children, beforeLogout, onLogoutFailure }) {
       return
     }
   }, [sidebarCollapsed])
+
+  const closeQuickJump = useCallback(() => setQuickJumpOpen(false), [])
+  const handleQuickJumpSelect = useCallback((target) => {
+    setQuickJumpOpen(false)
+    navigate(target)
+  }, [navigate])
+
+  useEffect(() => {
+    function handleQuickJumpShortcut(event) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase('vi') === 'k') {
+        event.preventDefault()
+        setQuickJumpOpen(true)
+      }
+    }
+
+    document.addEventListener('keydown', handleQuickJumpShortcut)
+    return () => document.removeEventListener('keydown', handleQuickJumpShortcut)
+  }, [])
 
   const loadNotifications = useCallback(async ({ silent = false } = {}) => {
     const userId = notificationUserIdRef.current
@@ -834,6 +997,18 @@ export default function AppLayout({ children, beforeLogout, onLogoutFailure }) {
           </nav>
 
           <div className="topbar-actions">
+            <button
+              type="button"
+              className="workspace-search-trigger"
+              aria-label="Đi nhanh đến một khu vực, phím tắt Control hoặc Command K"
+              aria-haspopup="dialog"
+              aria-expanded={quickJumpOpen}
+              onClick={() => setQuickJumpOpen(true)}
+            >
+              <Icon name="discover" />
+              <span>Đi nhanh</span>
+              <kbd>Ctrl K</kbd>
+            </button>
             <span className="demo-status"><i /> Beta an toàn</span>
             <div className="notification-menu" ref={notificationRootRef}>
               <button
@@ -1026,6 +1201,14 @@ export default function AppLayout({ children, beforeLogout, onLogoutFailure }) {
           <Link to="/trust">Trust Center</Link>
         </footer>
       </div>
+
+      {quickJumpOpen ? (
+        <WorkspaceQuickJump
+          open
+          onClose={closeQuickJump}
+          onSelect={handleQuickJumpSelect}
+        />
+      ) : null}
 
       <nav className="mobile-bottom-nav" aria-label="Điều hướng điện thoại">
         {mobileMenuItems.map((item) => (

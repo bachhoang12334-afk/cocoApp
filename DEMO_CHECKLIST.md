@@ -17,7 +17,7 @@ npm.cmd run check
 
 ## 2. Kịch bản trình bày 5–7 phút
 
-1. **Trang chủ, tin cậy và workspace:** mở `/` để giới thiệu nhanh ba nhu cầu; mở Trung tâm tin cậy để chỉ ra quyền dữ liệu và tiêu chuẩn cộng đồng, sau đó vào workspace để giới thiệu thanh điều hướng nhanh, mục tiêu kết nối, tab khu vực và bảng ngữ cảnh.
+1. **Trang chủ, tin cậy và workspace:** mở `/` để giới thiệu nhanh ba nhu cầu; mở Trung tâm tin cậy để chỉ ra quyền dữ liệu và tiêu chuẩn cộng đồng, sau đó vào workspace để giới thiệu thanh điều hướng nhanh, mục tiêu kết nối, tab khu vực và bảng ngữ cảnh. Nhấn `Ctrl/Cmd + K`, tìm “tin cay” không dấu rồi dùng bàn phím để đi nhanh tới đúng khu vực.
 2. **Khám phá:** cho xem Coco Fit, vị trí gần đúng, tín hiệu tin cậy và giải thích rằng app không thu GPS hay công khai số nhà.
 3. **Đã lưu:** lưu một hồ sơ, bật bộ lọc “Đã lưu”, rồi bỏ lưu để chứng minh shortlist là riêng tư và không gửi notification.
 4. **Kết nối có mục đích:** gửi lời mời kèm lời nhắn; tài khoản thứ hai chấp nhận, sau đó mở chuông và bật “Chưa đọc” để chỉ ra thông báo mới cùng mốc thời gian hoạt động.
