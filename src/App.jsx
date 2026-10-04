@@ -1,6 +1,7 @@
 import { Component, Fragment, Suspense, lazy, useEffect, useState } from 'react'
 import {
-  BrowserRouter,
+  createBrowserRouter,
+  RouterProvider,
   Routes,
   Route,
   Navigate,
@@ -139,7 +140,7 @@ function guestPage(page, account, isCheckingSession) {
   )
 }
 
-export default function App() {
+function AppRoutes() {
   const [account, setAccount] = useState(null)
   const [isCheckingSession, setIsCheckingSession] = useState(
     supabaseConfiguration.isConfigured
@@ -176,12 +177,8 @@ export default function App() {
     }
   }, [])
 
-  if (!supabaseConfiguration.isConfigured) {
-    return <ConfigurationErrorState />
-  }
-
   return (
-    <BrowserRouter>
+    <>
       {isCheckingSession && (
         <div className="auth-session-loading" role="status" aria-live="polite">
           Đang kiểm tra phiên đăng nhập…
@@ -269,6 +266,21 @@ export default function App() {
           </Routes>
         </Suspense>
       </RouteErrorBoundary>
-    </BrowserRouter>
+    </>
   )
+}
+
+const router = createBrowserRouter([
+  {
+    path: '*',
+    element: <AppRoutes />,
+  },
+])
+
+export default function App() {
+  if (!supabaseConfiguration.isConfigured) {
+    return <ConfigurationErrorState />
+  }
+
+  return <RouterProvider router={router} />
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useBlocker, useLocation } from 'react-router-dom'
 import AppLayout, { Icon } from '../components/AppLayout'
 import { getCurrentAccount } from '../auth'
 import { supabase } from '../lib/supabaseClient'
@@ -26,6 +26,7 @@ import {
   getPurposeDestination,
   REQUIRED_PROFILE_FIELDS,
 } from '../lib/profileReadiness'
+import { shouldBlockProfileNavigation } from '../lib/profileNavigationGuard'
 
 const defaultProfile = {
   fullName: '',
@@ -114,9 +115,21 @@ export default function Profile({ onAccountDeleted }) {
   const statusRef = useRef(null)
   const connectionAvailabilityRef = useRef(null)
   const profileMountedRef = useRef(false)
+  const leaveDialogRef = useRef(null)
+  const stayButtonRef = useRef(null)
+  const blockedNavigationTriggerRef = useRef(null)
 
   const isDirty = JSON.stringify(formData) !== JSON.stringify(savedProfile) ||
     phone !== savedPhone
+  const blockProfileNavigation = useCallback(
+    ({ currentLocation, nextLocation }) => shouldBlockProfileNavigation({
+      isDirty,
+      currentPathname: currentLocation.pathname,
+      nextPathname: nextLocation.pathname,
+    }),
+    [isDirty]
+  )
+  const blocker = useBlocker(blockProfileNavigation)
 
   const readiness = getProfileReadiness(formData)
   const completion = readiness.completionPercent
@@ -214,6 +227,52 @@ export default function Profile({ onAccountDeleted }) {
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [isDirty])
+
+  useEffect(() => {
+    if (blocker.state !== 'blocked') return undefined
+
+    blockedNavigationTriggerRef.current = document.activeElement
+    const focusFrame = window.requestAnimationFrame(() => {
+      stayButtonRef.current?.focus({ preventScroll: true })
+    })
+
+    function handleDialogKeyDown(event) {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        blocker.reset()
+        window.requestAnimationFrame(() => {
+          blockedNavigationTriggerRef.current?.focus?.({ preventScroll: true })
+        })
+        return
+      }
+
+      if (event.key !== 'Tab') return
+
+      const focusable = leaveDialogRef.current?.querySelectorAll(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled])'
+      )
+
+      if (!focusable?.length) return
+
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleDialogKeyDown)
+
+    return () => {
+      window.cancelAnimationFrame(focusFrame)
+      document.removeEventListener('keydown', handleDialogKeyDown)
+    }
+  }, [blocker])
 
   useEffect(() => {
     if (error) {
@@ -506,6 +565,17 @@ export default function Profile({ onAccountDeleted }) {
 
   function fieldLabel(name, label, optional = false) {
     return <span>{label} <em>{optional ? 'Không bắt buộc' : 'Bắt buộc'}</em></span>
+  }
+
+  function stayOnProfile() {
+    blocker.reset?.()
+    window.requestAnimationFrame(() => {
+      blockedNavigationTriggerRef.current?.focus?.({ preventScroll: true })
+    })
+  }
+
+  function leaveProfile() {
+    blocker.proceed?.()
   }
 
   return (
@@ -1046,6 +1116,51 @@ export default function Profile({ onAccountDeleted }) {
           <AccountDangerZone onAccountDeleted={onAccountDeleted} />
         </div>}
       </section>
+
+      {blocker.state === 'blocked' && (
+        <div
+          className="discover-dialog-backdrop profile-leave-dialog-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) stayOnProfile()
+          }}
+        >
+          <section
+            ref={leaveDialogRef}
+            className="discover-profile-dialog profile-leave-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="profile-leave-title"
+            aria-describedby="profile-leave-description"
+            tabIndex="-1"
+          >
+            <div className="discover-dialog-body profile-leave-dialog-body">
+              <p className="discover-dialog-kicker">THAY ĐỔI CHƯA LƯU</p>
+              <h2 id="profile-leave-title">Rời Hồ sơ và bỏ thay đổi?</h2>
+              <p id="profile-leave-description">
+                Nội dung cậu vừa sửa chưa được lưu. Ở lại để lưu hồ sơ, hoặc rời trang và bỏ các thay đổi này.
+              </p>
+            </div>
+            <footer className="discover-dialog-actions profile-leave-dialog-actions">
+              <button
+                ref={stayButtonRef}
+                type="button"
+                className="view-student-button"
+                onClick={stayOnProfile}
+              >
+                Ở lại chỉnh sửa
+              </button>
+              <button
+                type="button"
+                className="safety-danger-button"
+                onClick={leaveProfile}
+              >
+                Rời trang
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
     </AppLayout>
   )
 }

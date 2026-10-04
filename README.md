@@ -7,6 +7,7 @@ CocoApp là nền tảng kết nối sinh viên theo nhu cầu thực tế: họ
 - Trang giới thiệu công khai giải thích ba nhu cầu, cách ghép phù hợp và cam kết an toàn trước khi đăng ký.
 - Trung tâm tin cậy công khai giải thích quyền riêng tư, tiêu chuẩn cộng đồng, điều khoản và cách tự bảo vệ mình.
 - Đăng ký, đăng nhập và hồ sơ đồng bộ với Supabase.
+- Cảnh báo trước khi rời Hồ sơ nếu còn thay đổi chưa lưu, kể cả khi dùng menu, nút Back, reload hoặc đóng tab.
 - Khám phá sinh viên theo mục tiêu và phạm vi khu vực gần đúng, không thu GPS.
 - Lưu hồ sơ riêng tư để xem lại mà không thông báo cho người được lưu.
 - Tạm dừng kết nối mới để ẩn hồ sơ khỏi Khám phá mà vẫn giữ hội thoại hiện có.
