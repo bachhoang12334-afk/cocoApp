@@ -16,7 +16,7 @@ CocoApp là nền tảng kết nối sinh viên theo nhu cầu thực tế: họ
 - Gửi, chấp nhận, từ chối, hủy và ngắt kết nối.
 - Giới hạn lời mời theo thời gian ngay tại database để giảm spam và gửi lại liên tục.
 - Thông báo Realtime với trạng thái đã đọc.
-- Tin nhắn Realtime, lịch sử, phân trang, số tin chưa đọc và trạng thái đang nhập không lưu nội dung nháp.
+- Tin nhắn Realtime, lịch sử, phân trang, số tin chưa đọc, tìm/lọc hội thoại và trạng thái đang nhập không lưu nội dung nháp.
 - Coco Plan giúp hai kết nối đề xuất, thống nhất và hoàn thành một bước tiếp theo.
 - Khôi phục mật khẩu và gửi lại email xác nhận.
 - Giao diện responsive và hỗ trợ thao tác bàn phím.

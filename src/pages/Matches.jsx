@@ -41,6 +41,7 @@ import {
   TYPING_HEARTBEAT_MS,
   TYPING_IDLE_MS,
 } from '../lib/typingState'
+import { filterConversations } from '../lib/conversationFilters'
 
 const purposeLabels = {
   study_group: 'Học nhóm',
@@ -316,6 +317,8 @@ export default function Matches() {
   const [tab, setTab] = useState(matchesOverviewTab || 'pending')
   const [chatId, setChatId] = useState(null)
   const [draft, setDraft] = useState('')
+  const [conversationQuery, setConversationQuery] = useState('')
+  const [showUnreadOnly, setShowUnreadOnly] = useState(false)
   const [typingConnectionId, setTypingConnectionId] = useState(null)
   const [isSendingMessage, setIsSendingMessage] = useState(false)
   const [loadingOlderId, setLoadingOlderId] = useState(null)
@@ -863,10 +866,6 @@ export default function Matches() {
     (item) => item.status === 'accepted'
   ).length
 
-  const visibleConnections = connections.filter(
-    (item) => item.status === tab
-  )
-
   const chat = connections.find(
     (item) => item.id === chatId && item.status === 'accepted'
   )
@@ -896,6 +895,13 @@ export default function Matches() {
   const acceptedConnections = connections.filter(
     (item) => item.status === 'accepted'
   )
+  const filteredAcceptedConnections = filterConversations(acceptedConnections, {
+    query: conversationQuery,
+    unreadOnly: showUnreadOnly,
+  })
+  const visibleConnections = tab === 'accepted'
+    ? filteredAcceptedConnections
+    : connections.filter((item) => item.status === tab)
   const totalUnreadCount = acceptedConnections.reduce(
     (total, connection) => total + getUnreadMessageCount(connection),
     0
@@ -1664,6 +1670,15 @@ export default function Matches() {
     }
   }
 
+  function handleComposerKeyDown(event) {
+    const submitShortcut = (event.ctrlKey || event.metaKey) && event.key === 'Enter'
+    if (!submitShortcut || event.altKey || event.shiftKey || event.nativeEvent.isComposing) return
+
+    event.preventDefault()
+    if (!draft.trim() || isSendingMessage) return
+    event.currentTarget.form?.requestSubmit()
+  }
+
   function handleBlocked(profileId, name) {
     invalidateDeepLinkNavigation()
 
@@ -1829,7 +1844,10 @@ export default function Matches() {
               </button>
             </div>
 
-        {!isLoading && visibleConnections.length === 0 ? (
+        {!isLoading && (
+          (tab === 'pending' && visibleConnections.length === 0)
+          || (tab === 'accepted' && acceptedConnections.length === 0)
+        ) ? (
           <div id="matches-panel" role="tabpanel" aria-labelledby={`${tab}-tab`} className="discover-empty-state">
             <h2>
               {tab === 'pending'
@@ -1853,8 +1871,55 @@ export default function Matches() {
                 </div>
               </div>
 
+              <div className="conversation-filters" role="search" aria-label="Lọc cuộc trò chuyện">
+                <label className="conversation-search-field">
+                  <span>Tìm cuộc trò chuyện</span>
+                  <input
+                    type="search"
+                    value={conversationQuery}
+                    onChange={(event) => setConversationQuery(event.target.value)}
+                    placeholder="Tên, ngành, mục tiêu…"
+                    autoComplete="off"
+                  />
+                </label>
+                <div className="conversation-filter-row">
+                  <button
+                    type="button"
+                    className={showUnreadOnly ? 'is-active' : ''}
+                    aria-pressed={showUnreadOnly}
+                    onClick={() => setShowUnreadOnly((current) => !current)}
+                  >
+                    Chưa đọc
+                    {totalUnreadCount > 0 && (
+                      <span aria-label={`${totalUnreadCount} tin nhắn chưa đọc`}>
+                        {totalUnreadCount > 99 ? '99+' : totalUnreadCount}
+                      </span>
+                    )}
+                  </button>
+                  <small aria-live="polite">
+                    {filteredAcceptedConnections.length}/{acceptedConnections.length} hội thoại
+                  </small>
+                </div>
+              </div>
+
               <div className="conversation-list-items">
-                {acceptedConnections.map((item) => {
+                {filteredAcceptedConnections.length === 0 && (
+                  <div className="conversation-filter-empty" role="status">
+                    <strong>Không tìm thấy hội thoại phù hợp</strong>
+                    <p>Thử từ khóa khác hoặc hiển thị lại tất cả cuộc trò chuyện.</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConversationQuery('')
+                        setShowUnreadOnly(false)
+                      }}
+                    >
+                      Xóa bộ lọc
+                    </button>
+                  </div>
+                )}
+
+                {filteredAcceptedConnections.map((item) => {
                   const lastMessage = item.messages[item.messages.length - 1]
                   const unreadCount = getUnreadMessageCount(item)
 
@@ -2056,8 +2121,14 @@ export default function Matches() {
                       }}
                       placeholder="Nhập lời chào..."
                       maxLength={1000}
+                      aria-describedby="chat-composer-hint chat-composer-count"
+                      onKeyDown={handleComposerKeyDown}
                       required
                     />
+                    <div className="chat-composer-meta">
+                      <span id="chat-composer-hint">Ctrl/Cmd + Enter để gửi · Enter để xuống dòng</span>
+                      <span id="chat-composer-count">{draft.length}/1000</span>
+                    </div>
                   </label>
 
                   <div className="chat-composer-actions">
