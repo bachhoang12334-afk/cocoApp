@@ -154,8 +154,9 @@ export default function TrustCenter({ account }) {
               <article>
                 <h3>Quyền của cậu</h3>
                 <ul>
-                  <li>Xem và chỉnh sửa hồ sơ của chính mình.</li>
-                  <li>Tạm dừng kết nối mới mà vẫn giữ hội thoại hiện có.</li>
+                      <li>Xem và chỉnh sửa hồ sơ của chính mình.</li>
+                      <li>Tải bản sao JSON của dữ liệu tài khoản đang được phép xem.</li>
+                      <li>Tạm dừng kết nối mới mà vẫn giữ hội thoại hiện có.</li>
                   <li>Xoá vĩnh viễn tài khoản và dữ liệu gắn với tài khoản từ trang Hồ sơ.</li>
                 </ul>
               </article>

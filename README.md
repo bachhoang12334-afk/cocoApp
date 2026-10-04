@@ -11,6 +11,7 @@ CocoApp là nền tảng kết nối sinh viên theo nhu cầu thực tế: họ
 - Lưu hồ sơ riêng tư để xem lại mà không thông báo cho người được lưu.
 - Tạm dừng kết nối mới để ẩn hồ sơ khỏi Khám phá mà vẫn giữ hội thoại hiện có.
 - Tự xoá tài khoản bằng xác nhận nhiều bước; dữ liệu gắn với tài khoản được xoá theo cascade.
+- Tải bản sao JSON của hồ sơ, kết nối, tin nhắn, Coco Plan và thiết lập riêng tư trước khi xoá tài khoản.
 - Sao chép lời mời tham gia CocoApp từ trạng thái Khám phá chưa có người dùng khác.
 - Gửi, chấp nhận, từ chối, hủy và ngắt kết nối.
 - Thông báo Realtime với trạng thái đã đọc.

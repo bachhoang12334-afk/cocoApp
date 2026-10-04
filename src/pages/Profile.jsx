@@ -7,6 +7,7 @@ import TrustBadge from '../components/TrustBadge'
 import { getTrustSignal } from '../lib/trustSignals'
 import DataRecoveryState from '../components/DataRecoveryState'
 import AccountDangerZone from '../components/AccountDangerZone'
+import AccountDataExport from '../components/AccountDataExport'
 import {
   AVAILABILITY_OPTIONS,
   COLLABORATION_STYLE_OPTIONS,
@@ -1041,6 +1042,7 @@ export default function Profile({ onAccountDeleted }) {
               </div>
             </div>
           </form>
+          <AccountDataExport />
           <AccountDangerZone onAccountDeleted={onAccountDeleted} />
         </div>}
       </section>

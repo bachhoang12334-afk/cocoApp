@@ -7804,6 +7804,114 @@ textarea:focus-visible {
 }
 
 /* Account lifecycle */
+.account-data-export {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 24px;
+  color: var(--coco-ink);
+  border: 1px solid #cddfe9;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #f7fcff, #f2fbf8);
+}
+
+.account-data-export-copy {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.account-data-export-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: #176c72;
+  border-radius: 12px;
+  background: #dff4f1;
+}
+
+.account-data-export-icon svg,
+.account-data-export-action button svg {
+  width: 21px;
+  height: 21px;
+}
+
+.account-data-export-copy p {
+  margin: 0;
+  color: #176c72;
+  font-size: 9px;
+  font-weight: 880;
+  letter-spacing: .12em;
+}
+
+.account-data-export-copy h2 {
+  margin: 4px 0 5px;
+  font-size: 16px;
+  font-weight: 850;
+}
+
+.account-data-export-copy > div > span {
+  display: block;
+  max-width: 610px;
+  color: var(--coco-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.account-data-export-copy a {
+  display: inline-block;
+  margin-top: 7px;
+  color: #176c72;
+  font-size: 11px;
+  font-weight: 820;
+}
+
+.account-data-export-action {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  min-width: min(100%, 220px);
+}
+
+.account-data-export-action button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 15px;
+  color: #fff;
+  border: 1px solid #176c72;
+  border-radius: 9px;
+  background: #176c72;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 830;
+  cursor: pointer;
+}
+
+.account-data-export-action button:hover:not(:disabled) { background: #125a60; }
+.account-data-export-action button:focus-visible {
+  outline: 3px solid rgba(23, 108, 114, .22);
+  outline-offset: 3px;
+}
+.account-data-export-action button:disabled { opacity: .62; cursor: wait; }
+
+.account-data-export-action p {
+  max-width: 280px;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  text-align: right;
+}
+
+.account-data-export-action .is-success { color: #176c72; }
+.account-data-export-action .is-error { color: #9a4138; }
+
 .account-danger-zone {
   grid-column: 2;
   display: flex;
@@ -8079,17 +8187,27 @@ textarea:focus-visible {
 }
 
 @media (max-width: 940px) {
+  .account-data-export,
   .account-danger-zone {
     grid-column: 1;
   }
 }
 
 @media (max-width: 620px) {
+  .account-data-export,
   .account-danger-zone {
     align-items: stretch;
     flex-direction: column;
     padding: 19px;
   }
+
+  .account-data-export-action {
+    justify-items: stretch;
+    min-width: 0;
+  }
+
+  .account-data-export-action button { width: 100%; }
+  .account-data-export-action p { max-width: none; text-align: left; }
 
   .account-delete-trigger {
     width: 100%;
@@ -8135,6 +8253,7 @@ textarea:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .account-data-export-action button,
   .account-delete-trigger,
   .account-delete-dialog button {
     transition: none;
