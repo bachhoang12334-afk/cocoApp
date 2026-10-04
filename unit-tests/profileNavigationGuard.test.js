@@ -32,11 +32,21 @@ test('allows clean navigation and in-page Profile links', () => {
     }),
     false
   )
+  assert.equal(
+    shouldBlockProfileNavigation({
+      isDirty: true,
+      discardConfirmed: true,
+      currentPathname: '/profile',
+      nextPathname: '/login',
+    }),
+    false
+  )
 })
 
 test('Profile wires both SPA and browser-exit protection into accessible confirmation UI', async () => {
-  const [appSource, profileSource] = await Promise.all([
+  const [appSource, layoutSource, profileSource] = await Promise.all([
     readFile(new URL('../src/App.jsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/AppLayout.jsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/pages/Profile.jsx', import.meta.url), 'utf8'),
   ])
 
@@ -47,4 +57,11 @@ test('Profile wires both SPA and browser-exit protection into accessible confirm
   assert.match(profileSource, /role="alertdialog"/)
   assert.match(profileSource, /blocker\.reset/)
   assert.match(profileSource, /blocker\.proceed/)
+  assert.match(profileSource, /beforeLogout=\{confirmLogout\}/)
+  assert.match(layoutSource, /await beforeLogout\(\)/)
+  assert.match(layoutSource, /await logoutAccount\(\)/)
+  assert.ok(
+    layoutSource.indexOf('await beforeLogout()') < layoutSource.indexOf('await logoutAccount()'),
+    'logout confirmation must resolve before ending the Supabase session'
+  )
 })

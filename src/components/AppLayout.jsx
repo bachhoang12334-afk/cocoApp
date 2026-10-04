@@ -108,7 +108,7 @@ const pageTitles = {
   '/profile': 'Hồ sơ cá nhân',
 }
 
-export default function AppLayout({ children }) {
+export default function AppLayout({ children, beforeLogout, onLogoutFailure }) {
   const location = useLocation()
   const navigate = useNavigate()
   const mainRef = useRef(null)
@@ -605,8 +605,12 @@ export default function AppLayout({ children }) {
 
   async function handleLogout(event) {
     event.preventDefault()
+    setLogoutError('')
 
     try {
+      const canLogout = beforeLogout ? await beforeLogout() : true
+      if (!canLogout) return
+
       await logoutAccount()
 
       pendingNotificationReadsRef.current.clear()
@@ -628,6 +632,7 @@ export default function AppLayout({ children }) {
 
       window.location.assign('/login')
     } catch {
+      onLogoutFailure?.()
       setLogoutError('Không thể đăng xuất. Hãy tải lại trang và thử lại.')
     }
   }

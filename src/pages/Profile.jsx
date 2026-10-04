@@ -112,24 +112,30 @@ export default function Profile({ onAccountDeleted }) {
   const [savedPhone, setSavedPhone] = useState('')
   const [isLoadingProfile, setIsLoadingProfile] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [isLogoutConfirmationOpen, setIsLogoutConfirmationOpen] = useState(false)
   const statusRef = useRef(null)
   const connectionAvailabilityRef = useRef(null)
   const profileMountedRef = useRef(false)
   const leaveDialogRef = useRef(null)
   const stayButtonRef = useRef(null)
   const blockedNavigationTriggerRef = useRef(null)
+  const allowDiscardRef = useRef(false)
+  const logoutConfirmationResolverRef = useRef(null)
+  const logoutConfirmationPromiseRef = useRef(null)
 
   const isDirty = JSON.stringify(formData) !== JSON.stringify(savedProfile) ||
     phone !== savedPhone
   const blockProfileNavigation = useCallback(
     ({ currentLocation, nextLocation }) => shouldBlockProfileNavigation({
       isDirty,
+      discardConfirmed: allowDiscardRef.current,
       currentPathname: currentLocation.pathname,
       nextPathname: nextLocation.pathname,
     }),
     [isDirty]
   )
   const blocker = useBlocker(blockProfileNavigation)
+  const isLeaveDialogOpen = blocker.state === 'blocked' || isLogoutConfirmationOpen
 
   const readiness = getProfileReadiness(formData)
   const completion = readiness.completionPercent
@@ -218,7 +224,7 @@ export default function Profile({ onAccountDeleted }) {
 
   useEffect(() => {
     function handleBeforeUnload(event) {
-      if (!isDirty) return
+      if (!isDirty || allowDiscardRef.current) return
 
       event.preventDefault()
       event.returnValue = ''
@@ -229,7 +235,7 @@ export default function Profile({ onAccountDeleted }) {
   }, [isDirty])
 
   useEffect(() => {
-    if (blocker.state !== 'blocked') return undefined
+    if (!isLeaveDialogOpen) return undefined
 
     blockedNavigationTriggerRef.current = document.activeElement
     const focusFrame = window.requestAnimationFrame(() => {
@@ -239,7 +245,14 @@ export default function Profile({ onAccountDeleted }) {
     function handleDialogKeyDown(event) {
       if (event.key === 'Escape') {
         event.preventDefault()
-        blocker.reset()
+        if (isLogoutConfirmationOpen) {
+          logoutConfirmationResolverRef.current?.(false)
+          logoutConfirmationResolverRef.current = null
+          logoutConfirmationPromiseRef.current = null
+          setIsLogoutConfirmationOpen(false)
+        } else {
+          blocker.reset()
+        }
         window.requestAnimationFrame(() => {
           blockedNavigationTriggerRef.current?.focus?.({ preventScroll: true })
         })
@@ -272,7 +285,13 @@ export default function Profile({ onAccountDeleted }) {
       window.cancelAnimationFrame(focusFrame)
       document.removeEventListener('keydown', handleDialogKeyDown)
     }
-  }, [blocker])
+  }, [blocker, isLeaveDialogOpen, isLogoutConfirmationOpen])
+
+  useEffect(() => () => {
+    logoutConfirmationResolverRef.current?.(false)
+    logoutConfirmationResolverRef.current = null
+    logoutConfirmationPromiseRef.current = null
+  }, [])
 
   useEffect(() => {
     if (error) {
@@ -568,18 +587,50 @@ export default function Profile({ onAccountDeleted }) {
   }
 
   function stayOnProfile() {
-    blocker.reset?.()
+    if (isLogoutConfirmationOpen) {
+      logoutConfirmationResolverRef.current?.(false)
+      logoutConfirmationResolverRef.current = null
+      logoutConfirmationPromiseRef.current = null
+      setIsLogoutConfirmationOpen(false)
+    } else {
+      blocker.reset?.()
+    }
+
     window.requestAnimationFrame(() => {
       blockedNavigationTriggerRef.current?.focus?.({ preventScroll: true })
     })
   }
 
   function leaveProfile() {
-    blocker.proceed?.()
+    if (isLogoutConfirmationOpen) {
+      allowDiscardRef.current = true
+      logoutConfirmationResolverRef.current?.(true)
+      logoutConfirmationResolverRef.current = null
+      logoutConfirmationPromiseRef.current = null
+      setIsLogoutConfirmationOpen(false)
+    } else {
+      blocker.proceed?.()
+    }
+  }
+
+  function confirmLogout() {
+    if (!isDirty || allowDiscardRef.current) return Promise.resolve(true)
+    if (logoutConfirmationPromiseRef.current) return logoutConfirmationPromiseRef.current
+
+    setIsLogoutConfirmationOpen(true)
+    logoutConfirmationPromiseRef.current = new Promise((resolve) => {
+      logoutConfirmationResolverRef.current = resolve
+    })
+
+    return logoutConfirmationPromiseRef.current
+  }
+
+  function restoreNavigationGuard() {
+    allowDiscardRef.current = false
   }
 
   return (
-    <AppLayout>
+    <AppLayout beforeLogout={confirmLogout} onLogoutFailure={restoreNavigationGuard}>
       <section className="profile-page">
         <header className="profile-page-header profile-hero">
           <div className="profile-hero-copy">
@@ -1117,7 +1168,7 @@ export default function Profile({ onAccountDeleted }) {
         </div>}
       </section>
 
-      {blocker.state === 'blocked' && (
+      {isLeaveDialogOpen && (
         <div
           className="discover-dialog-backdrop profile-leave-dialog-backdrop"
           role="presentation"
@@ -1136,9 +1187,15 @@ export default function Profile({ onAccountDeleted }) {
           >
             <div className="discover-dialog-body profile-leave-dialog-body">
               <p className="discover-dialog-kicker">THAY ĐỔI CHƯA LƯU</p>
-              <h2 id="profile-leave-title">Rời Hồ sơ và bỏ thay đổi?</h2>
+              <h2 id="profile-leave-title">
+                {isLogoutConfirmationOpen
+                  ? 'Đăng xuất và bỏ thay đổi?'
+                  : 'Rời Hồ sơ và bỏ thay đổi?'}
+              </h2>
               <p id="profile-leave-description">
-                Nội dung cậu vừa sửa chưa được lưu. Ở lại để lưu hồ sơ, hoặc rời trang và bỏ các thay đổi này.
+                {isLogoutConfirmationOpen
+                  ? 'Nội dung cậu vừa sửa chưa được lưu. Ở lại để lưu hồ sơ, hoặc đăng xuất và bỏ các thay đổi này.'
+                  : 'Nội dung cậu vừa sửa chưa được lưu. Ở lại để lưu hồ sơ, hoặc rời trang và bỏ các thay đổi này.'}
               </p>
             </div>
             <footer className="discover-dialog-actions profile-leave-dialog-actions">
@@ -1155,7 +1212,7 @@ export default function Profile({ onAccountDeleted }) {
                 className="safety-danger-button"
                 onClick={leaveProfile}
               >
-                Rời trang
+                {isLogoutConfirmationOpen ? 'Đăng xuất' : 'Rời trang'}
               </button>
             </footer>
           </section>
