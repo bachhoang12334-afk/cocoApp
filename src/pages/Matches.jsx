@@ -8,6 +8,7 @@ import {
   formatMessageTimestamp,
   getLatestOwnMessageId,
   getMessageDeliveryLabel,
+  getMessagePreviewText,
   getUnreadMessageCount,
   mapMessage,
   mergeMessages,
@@ -53,6 +54,15 @@ import {
   readConversationDraft,
   saveConversationDraft,
 } from '../lib/conversationDrafts'
+import {
+  buildMessageImagePath,
+  buildMessageInsert,
+  getMessageImageValidationError,
+  MESSAGE_IMAGE_ACCEPT,
+  MESSAGE_IMAGE_BUCKET,
+  prepareMessageImage,
+} from '../lib/messageImages'
+import PrivateMessageImage from '../components/PrivateMessageImage'
 
 const purposeLabels = {
   study_group: 'Học nhóm',
@@ -117,6 +127,18 @@ function getMatchesErrorMessage(error) {
 }
 
 function getMessageErrorMessage(error) {
+  if (error?.message?.includes('5 MB') || error?.message?.includes('12 MB')) {
+    return error.message
+  }
+
+  if (error?.message?.toLowerCase().includes('message image')) {
+    return 'Ảnh chưa được lưu cùng tin nhắn. Ảnh đã chọn vẫn còn để cậu thử lại.'
+  }
+
+  if (error?.message?.toLowerCase().includes('storage') || error?.message?.toLowerCase().includes('bucket')) {
+    return 'Chưa tải được ảnh lên. Hãy kiểm tra kết nối rồi thử lại.'
+  }
+
   if (error?.message?.toLowerCase().includes('blocked')) {
     return 'Không thể gửi tin nhắn vì kết nối này đã bị chặn.'
   }
@@ -182,7 +204,7 @@ function mergeConnections(serverConnections, currentConnections) {
 async function fetchMessagePage(connectionRequestId, userId, beforeMessage = null) {
   let query = supabase
     .from('messages')
-    .select('id, connection_request_id, sender_id, body, created_at, read_at')
+    .select('id, connection_request_id, sender_id, body, image_path, image_mime_type, image_size_bytes, created_at, read_at')
     .eq('connection_request_id', connectionRequestId)
     .order('created_at', { ascending: false })
     .order('id', { ascending: false })
@@ -345,6 +367,9 @@ export default function Matches() {
   const [showUnreadOnly, setShowUnreadOnly] = useState(false)
   const [typingConnectionId, setTypingConnectionId] = useState(null)
   const [isSendingMessage, setIsSendingMessage] = useState(false)
+  const [selectedImage, setSelectedImage] = useState(null)
+  const [imageError, setImageError] = useState('')
+  const [isPreparingImage, setIsPreparingImage] = useState(false)
   const [loadingOlderId, setLoadingOlderId] = useState(null)
   const [statusMessage, setStatusMessage] = useState('')
   const [confirmation, setConfirmation] = useState(null)
@@ -389,6 +414,9 @@ export default function Matches() {
   const lastTypingBroadcastAtRef = useRef(0)
   const typingIdleTimerRef = useRef(null)
   const remoteTypingTimerRef = useRef(null)
+  const imageInputRef = useRef(null)
+  const selectedImageRef = useRef(null)
+  const imagePreparationRef = useRef(0)
 
   const restoreConversationDraft = useCallback((connectionRequestId) => {
     const restoredDraft = readConversationDraft(getConversationDraftStorage(), {
@@ -457,6 +485,18 @@ export default function Matches() {
     setTypingConnectionId(null)
   }, [])
 
+  const clearSelectedImage = useCallback(() => {
+    imagePreparationRef.current += 1
+    if (selectedImageRef.current?.previewUrl) {
+      URL.revokeObjectURL(selectedImageRef.current.previewUrl)
+    }
+    selectedImageRef.current = null
+    setSelectedImage(null)
+    setImageError('')
+    setIsPreparingImage(false)
+    if (imageInputRef.current) imageInputRef.current.value = ''
+  }, [])
+
   const invalidateDeepLinkNavigation = useCallback(() => {
     deepLinkInteractionRef.current += 1
     loadingPlanDeepLinkRef.current = null
@@ -481,6 +521,7 @@ export default function Matches() {
     setChatId(null)
     setDraft('')
     setDraftStorageStatus('idle')
+    clearSelectedImage()
     setLinkedPlan(null)
     setLinkedPlanConnectionId(null)
     planDialogConnectionIdRef.current = null
@@ -489,7 +530,7 @@ export default function Matches() {
     if (restoreFocus) {
       lastChatTriggerRef.current?.focus({ preventScroll: true })
     }
-  }, [clearRemoteTyping, stopLocalTyping])
+  }, [clearRemoteTyping, clearSelectedImage, stopLocalTyping])
 
   useEffect(() => {
     if (!matchesOverviewTab) return
@@ -541,6 +582,10 @@ export default function Matches() {
     matchesMountedRef.current = true
     return () => {
       matchesMountedRef.current = false
+      if (selectedImageRef.current?.previewUrl) {
+        URL.revokeObjectURL(selectedImageRef.current.previewUrl)
+      }
+      imagePreparationRef.current += 1
     }
   }, [])
 
@@ -1658,6 +1703,7 @@ export default function Matches() {
   function openChat(id) {
     invalidateDeepLinkNavigation()
     stopLocalTyping()
+    if (activeChatIdRef.current !== id) clearSelectedImage()
     lastChatTriggerRef.current = document.activeElement
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur()
@@ -1688,24 +1734,48 @@ export default function Matches() {
 
     const text = draft.trim()
     const userId = messageUserIdRef.current
-    if (!text || !chat || !userId || isSendingMessage) return
+    const image = selectedImageRef.current
+    if ((!text && !image) || !chat || !userId || isSendingMessage || isPreparingImage) return
 
     invalidateDeepLinkNavigation()
     stopLocalTyping()
     const connectionRequestId = chat.id
     setIsSendingMessage(true)
     setError('')
+    let uploadedImagePath = null
 
     try {
+      let imageMetadata = null
+
+      if (image) {
+        uploadedImagePath = buildMessageImagePath(connectionRequestId, userId)
+        const { error: uploadError } = await supabase.storage
+          .from(MESSAGE_IMAGE_BUCKET)
+          .upload(uploadedImagePath, image.blob, {
+            cacheControl: '3600',
+            contentType: 'image/webp',
+            upsert: false,
+          })
+
+        if (uploadError) throw uploadError
+
+        imageMetadata = {
+          path: uploadedImagePath,
+          mimeType: 'image/webp',
+          size: image.blob.size,
+        }
+      }
+
       const { data: insertedMessage, error: insertError } = await supabase
         .from('messages')
-        .insert({
+        .insert(buildMessageInsert({
           id: crypto.randomUUID(),
-          connection_request_id: connectionRequestId,
-          sender_id: userId,
-          body: text,
-        })
-        .select('id, connection_request_id, sender_id, body, created_at, read_at')
+          connectionRequestId,
+          senderId: userId,
+          text,
+          image: imageMetadata,
+        }))
+        .select('id, connection_request_id, sender_id, body, image_path, image_mime_type, image_size_bytes, created_at, read_at')
         .single()
 
       if (insertError) throw insertError
@@ -1719,14 +1789,74 @@ export default function Matches() {
       removeConversationDraft(connectionRequestId)
       setDraft('')
       setDraftStorageStatus('idle')
+      clearSelectedImage()
       window.requestAnimationFrame(() => {
         const messageList = messageListRef.current
         if (messageList) messageList.scrollTop = messageList.scrollHeight
       })
     } catch (sendError) {
+      if (uploadedImagePath) {
+        try {
+          await supabase.storage
+            .from(MESSAGE_IMAGE_BUCKET)
+            .remove([uploadedImagePath])
+        } catch {
+          // Cleanup is best-effort; keep the original send error actionable.
+        }
+      }
       setError(getMessageErrorMessage(sendError))
     } finally {
       setIsSendingMessage(false)
+    }
+  }
+
+  async function handleMessageImageChange(event) {
+    const [file] = event.target.files || []
+    event.target.value = ''
+    if (!file) return
+
+    clearSelectedImage()
+    const validationError = getMessageImageValidationError(file)
+    if (validationError) {
+      setImageError(validationError)
+      return
+    }
+
+    invalidateDeepLinkNavigation()
+    const connectionRequestId = activeChatIdRef.current
+    const preparationId = imagePreparationRef.current + 1
+    imagePreparationRef.current = preparationId
+    setIsPreparingImage(true)
+    setImageError('')
+
+    try {
+      const prepared = await prepareMessageImage(file)
+      const nextImage = {
+        ...prepared,
+        previewUrl: URL.createObjectURL(prepared.blob),
+      }
+
+      if (
+        imagePreparationRef.current !== preparationId
+        || activeChatIdRef.current !== connectionRequestId
+      ) {
+        URL.revokeObjectURL(nextImage.previewUrl)
+        return
+      }
+
+      if (selectedImageRef.current?.previewUrl) {
+        URL.revokeObjectURL(selectedImageRef.current.previewUrl)
+      }
+      selectedImageRef.current = nextImage
+      setSelectedImage(nextImage)
+    } catch (prepareError) {
+      if (imagePreparationRef.current === preparationId) {
+        setImageError(prepareError.message || 'Không xử lý được ảnh này.')
+      }
+    } finally {
+      if (imagePreparationRef.current === preparationId) {
+        setIsPreparingImage(false)
+      }
     }
   }
 
@@ -1735,7 +1865,7 @@ export default function Matches() {
     if (!submitShortcut || event.altKey || event.shiftKey || event.nativeEvent.isComposing) return
 
     event.preventDefault()
-    if (!draft.trim() || isSendingMessage) return
+    if ((!draft.trim() && !selectedImageRef.current) || isSendingMessage || isPreparingImage) return
     event.currentTarget.form?.requestSubmit()
   }
 
@@ -2003,7 +2133,7 @@ export default function Matches() {
                       </span>
                       <span className="conversation-item-copy">
                         <strong>{item.name}</strong>
-                        <small>{lastMessage?.text || item.purpose || 'Sẵn sàng trò chuyện'}</small>
+                        <small>{getMessagePreviewText(lastMessage) || item.purpose || 'Sẵn sàng trò chuyện'}</small>
                       </span>
                       <span className="conversation-item-meta">
                         {activityDate && activityLabel && (
@@ -2140,7 +2270,13 @@ export default function Matches() {
                         <strong aria-hidden="true">
                           {message.sender === 'me' ? 'Cậu' : chat.name}
                         </strong>
-                        <div>{message.text}</div>
+                        {message.imagePath && (
+                          <PrivateMessageImage
+                            path={message.imagePath}
+                            senderName={message.sender === 'me' ? 'cậu' : chat.name}
+                          />
+                        )}
+                        {message.text && <div className="chat-message-text">{message.text}</div>}
                         <footer className="chat-message-meta">
                           {timestampLabel && (
                             <time dateTime={message.createdAt}>{timestampLabel}</time>
@@ -2166,6 +2302,41 @@ export default function Matches() {
                 </div>
 
                 <form className="chat-composer" onSubmit={sendMessage}>
+                  {(selectedImage || imageError || isPreparingImage) && (
+                    <div className="chat-image-selection" aria-live="polite">
+                      {selectedImage && (
+                        <div className="chat-image-preview">
+                          <img
+                            src={selectedImage.previewUrl}
+                            alt="Xem trước ảnh sẽ gửi"
+                          />
+                          <div>
+                            <strong>{selectedImage.originalName}</strong>
+                            <span>
+                              {selectedImage.width} × {selectedImage.height} px ·{' '}
+                              {Math.max(1, Math.round(selectedImage.blob.size / 1024))} KB
+                            </span>
+                            <small>Đã nén và loại metadata vị trí khỏi ảnh.</small>
+                          </div>
+                          <button
+                            type="button"
+                            className="chat-image-remove"
+                            onClick={clearSelectedImage}
+                            disabled={isSendingMessage}
+                          >
+                            Bỏ ảnh
+                          </button>
+                        </div>
+                      )}
+                      {isPreparingImage && (
+                        <p className="chat-image-status" role="status">Đang nén và bảo vệ thông tin ảnh…</p>
+                      )}
+                      {imageError && (
+                        <p id="chat-image-error" className="chat-image-error" role="alert">{imageError}</p>
+                      )}
+                    </div>
+                  )}
+
                   <label className="profile-field">
                     <span>Tin nhắn</span>
                     <textarea
@@ -2192,9 +2363,8 @@ export default function Matches() {
                       }}
                       placeholder="Nhập lời chào..."
                       maxLength={CONVERSATION_DRAFT_MAX_LENGTH}
-                      aria-describedby="chat-composer-hint chat-composer-count"
+                      aria-describedby={`chat-composer-hint chat-composer-count${imageError ? ' chat-image-error' : ''}`}
                       onKeyDown={handleComposerKeyDown}
-                      required
                     />
                     <div className="chat-composer-meta">
                       <span id="chat-composer-hint">
@@ -2207,10 +2377,28 @@ export default function Matches() {
                   </label>
 
                   <div className="chat-composer-actions">
+                    <label
+                      className={`view-student-button chat-image-picker ${isSendingMessage || isPreparingImage ? 'is-disabled' : ''}`}
+                    >
+                      <span aria-hidden="true">{selectedImage ? 'Đổi ảnh' : 'Thêm ảnh'}</span>
+                      <input
+                        ref={imageInputRef}
+                        className="chat-image-input"
+                        type="file"
+                        accept={MESSAGE_IMAGE_ACCEPT}
+                        aria-label={selectedImage
+                          ? 'Đổi ảnh JPG, PNG hoặc WebP sẽ gửi'
+                          : 'Thêm ảnh JPG, PNG hoặc WebP để gửi'}
+                        aria-describedby="chat-image-help"
+                        onChange={handleMessageImageChange}
+                        disabled={isSendingMessage || isPreparingImage}
+                      />
+                    </label>
+                    <small id="chat-image-help">JPG, PNG hoặc WebP · ảnh gốc tối đa 12 MB</small>
                     <button
                       type="submit"
                       className="connect-student-button"
-                      disabled={!draft.trim() || isSendingMessage}
+                      disabled={(!draft.trim() && !selectedImage) || isSendingMessage || isPreparingImage}
                       aria-busy={isSendingMessage}
                     >
                       {isSendingMessage ? 'Đang gửi…' : 'Gửi tin nhắn'}

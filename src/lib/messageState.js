@@ -26,10 +26,19 @@ export function mapMessage(message, userId) {
   return {
     id: message.id,
     sender: message.sender_id === userId ? 'me' : 'other',
-    text: message.body,
+    text: message.body || '',
+    imagePath: message.image_path || null,
+    imageMimeType: message.image_mime_type || null,
+    imageSizeBytes: message.image_size_bytes || null,
     createdAt: message.created_at,
     readAt: message.read_at,
   }
+}
+
+export function getMessagePreviewText(message) {
+  if (message?.text) return message.text
+  if (message?.imagePath) return 'Đã gửi một ảnh'
+  return ''
 }
 
 export function getUnreadMessageCount(connection) {

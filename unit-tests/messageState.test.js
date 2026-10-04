@@ -5,6 +5,7 @@ import {
   formatMessageTimestamp,
   getLatestOwnMessageId,
   getMessageDeliveryLabel,
+  getMessagePreviewText,
   getUnreadMessageCount,
   mapMessage,
   mergeMessages,
@@ -29,11 +30,30 @@ test('maps sender ownership without exposing database field names to the UI', ()
     id: 'message-1',
     sender: 'other',
     text: 'Xin chào',
+    imagePath: null,
+    imageMimeType: null,
+    imageSizeBytes: null,
     createdAt: '2026-09-18T01:00:00.000Z',
     readAt: null,
   })
 
   assert.equal(mapMessage(row({ sender_id: userId }), userId).sender, 'me')
+})
+
+test('maps image metadata and provides a useful conversation preview', () => {
+  const imageMessage = mapMessage(row({
+    body: null,
+    image_path: 'connection/user/image.webp',
+    image_mime_type: 'image/webp',
+    image_size_bytes: 2048,
+  }), userId)
+
+  assert.equal(imageMessage.text, '')
+  assert.equal(imageMessage.imagePath, 'connection/user/image.webp')
+  assert.equal(imageMessage.imageMimeType, 'image/webp')
+  assert.equal(imageMessage.imageSizeBytes, 2048)
+  assert.equal(getMessagePreviewText(imageMessage), 'Đã gửi một ảnh')
+  assert.equal(getMessagePreviewText(mapMessage(row(), userId)), 'Xin chào')
 })
 
 test('counts only unread messages received from the other participant', () => {

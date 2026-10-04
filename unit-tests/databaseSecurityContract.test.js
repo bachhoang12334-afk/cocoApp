@@ -22,6 +22,10 @@ const readStatusMigration = await readFile(
   new URL('../supabase/migrations/20260917000005_add_message_read_status.sql', import.meta.url),
   'utf8'
 )
+const privateMessageImagesMigration = await readFile(
+  new URL('../supabase/migrations/20260917000023_add_private_message_images.sql', import.meta.url),
+  'utf8'
+)
 const profileSyncMigration = await readFile(
   new URL('../supabase/migrations/20260917000006_sync_profile_registration_metadata.sql', import.meta.url),
   'utf8'
@@ -246,6 +250,20 @@ test('message updates expose only read_at and protect content fields', () => {
   assert.match(readStatusMigration, /sender_id <> \(select auth\.uid\(\)\)/)
   assert.match(readStatusMigration, /new\.body is distinct from old\.body/)
   assert.doesNotMatch(readStatusMigration, /grant delete/i)
+})
+
+test('message images stay private, participant-scoped, and immutable', () => {
+  assert.match(privateMessageImagesMigration, /'message-images',[\s\S]*false,[\s\S]*5242880/)
+  assert.match(privateMessageImagesMigration, /allowed_mime_types[\s\S]*image\/webp/)
+  assert.match(privateMessageImagesMigration, /body is not null or image_path is not null/)
+  assert.match(privateMessageImagesMigration, /image_path ~[\s\S]*connection_request_id::text[\s\S]*sender_id::text/)
+  assert.match(privateMessageImagesMigration, /request\.status = 'accepted'/)
+  assert.match(privateMessageImagesMigration, /storage\.filename\(name\)/)
+  assert.match(privateMessageImagesMigration, /not exists \([\s\S]*from public\.messages as message[\s\S]*message\.image_path = name/)
+  assert.match(privateMessageImagesMigration, /new\.image_path is distinct from old\.image_path/)
+  assert.match(privateMessageImagesMigration, /grant update \(read_at\)/)
+  assert.doesNotMatch(privateMessageImagesMigration, /public\s*=\s*true|getPublicUrl/i)
+  assert.doesNotMatch(privateMessageImagesMigration, /grant delete[\s\S]*public\.messages/i)
 })
 
 test('registration metadata initializes only public profile identity fields', () => {

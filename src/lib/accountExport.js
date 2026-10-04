@@ -32,7 +32,7 @@ const exportQueries = [
     key: 'messages',
     run: () => supabase
       .from('messages')
-      .select('id, connection_request_id, sender_id, body, created_at, read_at')
+      .select('id, connection_request_id, sender_id, body, image_path, image_mime_type, image_size_bytes, created_at, read_at')
       .order('created_at', { ascending: true }),
   },
   {

@@ -17,7 +17,7 @@ CocoApp là nền tảng kết nối sinh viên theo nhu cầu thực tế: họ
 - Gửi, chấp nhận, từ chối, hủy và ngắt kết nối.
 - Giới hạn lời mời theo thời gian ngay tại database để giảm spam và gửi lại liên tục.
 - Thông báo Realtime với trạng thái đã đọc, bộ lọc chưa đọc và thời gian hoạt động dễ quét nhanh.
-- Tin nhắn Realtime, lịch sử, phân trang, số tin chưa đọc, tìm/lọc hội thoại, sắp xếp theo hoạt động mới nhất, nháp tạm theo từng hội thoại trong tab hiện tại và trạng thái đang nhập không truyền nội dung nháp.
+- Tin nhắn Realtime hỗ trợ văn bản và ảnh riêng tư, lịch sử, phân trang, số tin chưa đọc, tìm/lọc hội thoại, sắp xếp theo hoạt động mới nhất, nháp tạm theo từng hội thoại trong tab hiện tại và trạng thái đang nhập không truyền nội dung nháp. Ảnh được nén thành WebP và loại metadata GPS/EXIF trước khi tải lên.
 - Coco Plan giúp hai kết nối đề xuất, thống nhất và hoàn thành một bước tiếp theo.
 - Khôi phục mật khẩu và gửi lại email xác nhận.
 - Giao diện responsive và hỗ trợ thao tác bàn phím.
@@ -60,6 +60,7 @@ Chạy migrations theo đúng thứ tự trong `supabase/migrations`:
 21. `20260917000020_add_connection_pause.sql`
 22. `20260917000021_add_self_service_account_deletion.sql`
 23. `20260917000022_limit_connection_request_spam.sql`
+24. `20260917000023_add_private_message_images.sql`
 
 Không chỉnh sửa migration đã chạy. Mọi thay đổi schema tiếp theo phải nằm trong migration mới.
 
@@ -103,4 +104,5 @@ Khi chuẩn bị thuyết trình, dùng [DEMO_CHECKLIST.md](./DEMO_CHECKLIST.md)
 - `profile_private` không được đưa vào Realtime hoặc hiển thị cho người dùng khác.
 - Client không được tự tạo notification tùy ý hoặc sửa nội dung tin nhắn đã gửi.
 - Tin nhắn chỉ hoạt động khi connection đang ở trạng thái `accepted`.
+- Ảnh tin nhắn nằm trong bucket private `message-images`; client chỉ lấy URL ký tạm thời, không tạo URL công khai.
 - Không lưu khóa Supabase hoặc thông tin riêng tư trong repository.

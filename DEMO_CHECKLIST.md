@@ -4,7 +4,7 @@ Checklist này giúp chuẩn bị một buổi demo ngắn, có dữ liệu th�
 
 ## 1. Trước buổi demo
 
-- Chạy đủ migrations từ `20260917000000` đến `20260917000022` trên đúng Supabase project.
+- Chạy đủ migrations từ `20260917000000` đến `20260917000023` trên đúng Supabase project.
 - Xác nhận `.env.local` chỉ có `VITE_SUPABASE_URL` và `VITE_SUPABASE_PUBLISHABLE_KEY`; không dùng service role key.
 - Chuẩn bị ít nhất hai tài khoản đã xác nhận email.
 - Hoàn thiện chín trường bắt buộc ở cả hai hồ sơ: họ tên, trường, ngành, năm học, giới tính, mục tiêu, tỉnh/thành phố, khu vực và phạm vi kết nối.
@@ -21,7 +21,7 @@ npm.cmd run check
 2. **Khám phá:** cho xem Coco Fit, vị trí gần đúng, tín hiệu tin cậy và giải thích rằng app không thu GPS hay công khai số nhà.
 3. **Đã lưu:** lưu một hồ sơ, bật bộ lọc “Đã lưu”, rồi bỏ lưu để chứng minh shortlist là riêng tư và không gửi notification.
 4. **Kết nối có mục đích:** gửi lời mời kèm lời nhắn; tài khoản thứ hai chấp nhận, sau đó mở chuông và bật “Chưa đọc” để chỉ ra thông báo mới cùng mốc thời gian hoạt động.
-5. **Tin nhắn Realtime:** tìm một hội thoại, bật lọc “Chưa đọc”, gõ một đoạn nháp rồi chuyển hội thoại và quay lại để chứng minh nháp được giữ trong tab; tiếp tục gõ ở một phía để chỉ ra trạng thái đang nhập tạm thời, sau đó dùng `Ctrl/Cmd + Enter` để gửi; chỉ ra trạng thái đã gửi/đã đọc và hội thoại vừa nhận tin được đưa lên đầu.
+5. **Tin nhắn Realtime:** tìm một hội thoại, bật lọc “Chưa đọc”, gõ một đoạn nháp rồi chuyển hội thoại và quay lại để chứng minh nháp được giữ trong tab; thêm một ảnh chỗ ở hoặc địa điểm mẫu, kiểm tra preview và dòng xác nhận đã loại metadata vị trí rồi gửi kèm chú thích; tiếp tục gõ ở một phía để chỉ ra trạng thái đang nhập tạm thời, sau đó dùng `Ctrl/Cmd + Enter` để gửi; chỉ ra trạng thái đã gửi/đã đọc và hội thoại vừa nhận tin được đưa lên đầu.
 6. **Coco Plan:** đề xuất một bước tiếp theo, chấp nhận và giải thích quy tắc hoàn thành theo thời gian.
 7. **Quyền riêng tư chủ động:** tắt “Nhận kết nối mới”, cho thấy hồ sơ được ẩn khỏi Khám phá nhưng hội thoại hiện có vẫn giữ nguyên; sau đó bật lại.
 8. **Chống mất dữ liệu:** sửa thử một trường ở Hồ sơ rồi mở mục khác; chọn “Ở lại chỉnh sửa” trong cảnh báo thay đổi chưa lưu và lưu hồ sơ trước khi tiếp tục.
@@ -46,6 +46,7 @@ Không nhập số điện thoại, địa chỉ chính xác, mật khẩu hoặ
 - Không gửi được lời mời: kiểm tra mục tiêu hợp lệ, lời nhắn 8–240 ký tự và không có kết nối đang pending/accepted.
 - Bị giới hạn lời mời: chờ hết cửa sổ 10 phút/24 giờ hoặc 60 phút trước khi gửi lại cùng cặp; không xoá dữ liệu để né giới hạn.
 - Không nhắn được: kết nối phải ở trạng thái `accepted`.
+- Không gửi được ảnh: kiểm tra migration `20260917000023`, bucket `message-images` đang private, ảnh nguồn là JPG/PNG/WebP nhỏ hơn 12 MB và kết nối vẫn `accepted`.
 - Realtime chậm: làm mới trang; dữ liệu đã lưu vẫn được tải lại từ Supabase.
 
 ## 5. Thông điệp sản phẩm
