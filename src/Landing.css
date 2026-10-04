@@ -844,18 +844,26 @@
 }
 
 .landing-footer p,
-.landing-footer > a:last-child {
+.landing-footer-links {
   color: var(--landing-muted);
   font-size: 11px;
 }
 
-.landing-footer > a:last-child {
+.landing-footer-links {
   justify-self: end;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 13px;
+}
+
+.landing-footer-links a {
+  color: inherit;
   font-weight: 750;
   text-decoration: none;
 }
 
-.landing-footer > a:last-child:hover {
+.landing-footer-links a:hover {
   color: var(--landing-violet-dark);
 }
 
@@ -1107,11 +1115,13 @@
   }
 
   .landing-footer p,
-  .landing-footer > a:last-child {
+  .landing-footer-links {
     grid-column: auto;
     grid-row: auto;
     justify-self: start;
   }
+
+  .landing-footer-links { justify-content: flex-start; }
 }
 
 @media (prefers-reduced-motion: reduce) {

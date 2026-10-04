@@ -17,7 +17,7 @@ npm.cmd run check
 
 ## 2. Kịch bản trình bày 5–7 phút
 
-1. **Trang chủ, đăng nhập và Tổng quan:** mở `/` để giới thiệu nhanh ba nhu cầu, cách Coco giải thích độ phù hợp và quyền riêng tư; sau đó vào Coco Compass.
+1. **Trang chủ, tin cậy và Tổng quan:** mở `/` để giới thiệu nhanh ba nhu cầu; mở Trung tâm tin cậy để chỉ ra quyền dữ liệu và tiêu chuẩn cộng đồng, sau đó vào Coco Compass.
 2. **Khám phá:** cho xem Coco Fit, vị trí gần đúng, tín hiệu tin cậy và giải thích rằng app không thu GPS hay công khai số nhà.
 3. **Đã lưu:** lưu một hồ sơ, bật bộ lọc “Đã lưu”, rồi bỏ lưu để chứng minh shortlist là riêng tư và không gửi notification.
 4. **Kết nối có mục đích:** gửi lời mời kèm lời nhắn; tài khoản thứ hai chấp nhận.

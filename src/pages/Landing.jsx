@@ -259,7 +259,11 @@ export default function Landing({ account, isCheckingSession }) {
           <span>Coco<span>.</span></span>
         </Link>
         <p>© 2026 Coco App · Kết nối sinh viên có mục đích.</p>
-        <Link to={isAuthenticated ? '/safety' : '/register'}>{isAuthenticated ? 'Trung tâm an toàn' : 'Tham gia Coco'}</Link>
+        <div className="landing-footer-links">
+          <Link to="/trust#privacy">Quyền riêng tư</Link>
+          <Link to="/trust#community">Cộng đồng</Link>
+          <Link to={isAuthenticated ? '/safety' : '/register'}>{isAuthenticated ? 'Trung tâm an toàn' : 'Tham gia Coco'}</Link>
+        </div>
       </footer>
     </div>
   )

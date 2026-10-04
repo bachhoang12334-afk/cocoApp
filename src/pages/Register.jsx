@@ -17,6 +17,7 @@ export default function Register({ onAuthenticated }) {
   })
 
   const [isLoading, setIsLoading] = useState(false)
+  const [acceptedGuidelines, setAcceptedGuidelines] = useState(false)
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
   const errorRef = useRef(null)
@@ -56,6 +57,10 @@ export default function Register({ onAuthenticated }) {
 
     if (form.password !== form.confirmPassword) {
       nextErrors.confirmPassword = 'Hai ô mật khẩu chưa giống nhau.'
+    }
+
+    if (!acceptedGuidelines) {
+      nextErrors.guidelines = 'Hãy đọc và đồng ý với nguyên tắc sử dụng Coco.'
     }
 
     if (Object.keys(nextErrors).length > 0) {
@@ -230,6 +235,42 @@ export default function Register({ onAuthenticated }) {
                 {fieldErrors[field.name] && <small id={`register-${field.name}-error`} className="auth-field-error">{fieldErrors[field.name]}</small>}
               </div>
             ))}
+
+            <div className="register-policy-consent">
+              <input
+                id="register-guidelines"
+                type="checkbox"
+                checked={acceptedGuidelines}
+                onChange={(event) => {
+                  setAcceptedGuidelines(event.target.checked)
+                  setError('')
+                  setFieldErrors((current) => {
+                    if (!current.guidelines) return current
+                    const next = { ...current }
+                    delete next.guidelines
+                    return next
+                  })
+                }}
+                disabled={isLoading}
+                aria-invalid={Boolean(fieldErrors.guidelines)}
+                aria-describedby={fieldErrors.guidelines ? 'register-guidelines-error' : undefined}
+              />
+              <div className="register-policy-copy">
+                <label htmlFor="register-guidelines">
+                  Mình đã đọc và đồng ý với các nguyên tắc sử dụng Coco.
+                </label>
+                <span>
+                  Xem <Link to="/trust#terms" target="_blank" rel="noreferrer">điều khoản sử dụng</Link>
+                  {' '}và{' '}
+                  <Link to="/trust#community" target="_blank" rel="noreferrer">tiêu chuẩn cộng đồng</Link>.
+                </span>
+              </div>
+              {fieldErrors.guidelines && (
+                <small id="register-guidelines-error" className="auth-field-error">
+                  {fieldErrors.guidelines}
+                </small>
+              )}
+            </div>
 
             <button
               type="submit"

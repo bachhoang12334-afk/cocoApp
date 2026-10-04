@@ -148,6 +148,38 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .checkbox-label { display: flex; align-items: flex-start; gap: 10px; color: var(--coco-muted); font-size: 13px; }
 .custom-checkbox { width: 17px; height: 17px; accent-color: var(--coco-primary); }
 
+.register-policy-consent {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  align-items: start;
+  gap: 9px 10px;
+  padding: 15px 16px;
+  color: var(--coco-muted);
+  border: 1px solid var(--coco-line);
+  border-radius: 14px;
+  background: #f9fafc;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.register-policy-consent:focus-within {
+  border-color: var(--coco-primary);
+  box-shadow: 0 0 0 4px rgba(98,91,246,.1);
+}
+
+.register-policy-consent input {
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  accent-color: var(--coco-primary);
+}
+
+.register-policy-copy { display: grid; gap: 2px; }
+.register-policy-consent label { color: var(--coco-ink); font-weight: 750; cursor: pointer; }
+.register-policy-consent a { color: var(--coco-primary-dark); font-weight: 800; }
+.register-policy-consent .auth-field-error { grid-column: 2; }
+
 /* Main application shell */
 .app-shell { min-height: 100dvh; color: var(--coco-ink); background: var(--coco-page); }
 .app-shell .app-sidebar {
