@@ -35,6 +35,12 @@ import {
   mapCocoPlan,
   mergeCocoPlans,
 } from '../lib/cocoPlan'
+import {
+  createTypingPayload,
+  isTypingEventForConversation,
+  TYPING_HEARTBEAT_MS,
+  TYPING_IDLE_MS,
+} from '../lib/typingState'
 
 const purposeLabels = {
   study_group: 'Học nhóm',
@@ -310,6 +316,7 @@ export default function Matches() {
   const [tab, setTab] = useState(matchesOverviewTab || 'pending')
   const [chatId, setChatId] = useState(null)
   const [draft, setDraft] = useState('')
+  const [typingConnectionId, setTypingConnectionId] = useState(null)
   const [isSendingMessage, setIsSendingMessage] = useState(false)
   const [loadingOlderId, setLoadingOlderId] = useState(null)
   const [statusMessage, setStatusMessage] = useState('')
@@ -348,6 +355,52 @@ export default function Matches() {
   const pendingConnectionCardRefs = useRef(new Map())
   const pendingConnectionFocusRef = useRef(null)
   const chatFocusGenerationRef = useRef(null)
+  const typingChannelRef = useRef(null)
+  const typingChannelConnectionIdRef = useRef(null)
+  const typingSubscribedRef = useRef(false)
+  const localTypingActiveRef = useRef(false)
+  const lastTypingBroadcastAtRef = useRef(0)
+  const typingIdleTimerRef = useRef(null)
+  const remoteTypingTimerRef = useRef(null)
+
+  const sendTypingState = useCallback((isTyping) => {
+    const channel = typingChannelRef.current
+    const connectionRequestId = typingChannelConnectionIdRef.current
+    const senderId = messageUserIdRef.current
+    const now = Date.now()
+
+    if (!channel || !typingSubscribedRef.current || !connectionRequestId || !senderId) return
+    if (
+      isTyping
+      && localTypingActiveRef.current
+      && now - lastTypingBroadcastAtRef.current < TYPING_HEARTBEAT_MS
+    ) return
+    if (!isTyping && !localTypingActiveRef.current) return
+
+    localTypingActiveRef.current = isTyping
+    lastTypingBroadcastAtRef.current = now
+    void channel.send({
+      type: 'broadcast',
+      event: 'typing',
+      payload: createTypingPayload({ connectionRequestId, senderId, isTyping, sentAt: now }),
+    })
+  }, [])
+
+  const stopLocalTyping = useCallback(() => {
+    if (typingIdleTimerRef.current) {
+      window.clearTimeout(typingIdleTimerRef.current)
+      typingIdleTimerRef.current = null
+    }
+    sendTypingState(false)
+  }, [sendTypingState])
+
+  const clearRemoteTyping = useCallback(() => {
+    if (remoteTypingTimerRef.current) {
+      window.clearTimeout(remoteTypingTimerRef.current)
+      remoteTypingTimerRef.current = null
+    }
+    setTypingConnectionId(null)
+  }, [])
 
   const invalidateDeepLinkNavigation = useCallback(() => {
     deepLinkInteractionRef.current += 1
@@ -365,6 +418,8 @@ export default function Matches() {
   }, [connectionNotificationDeepLinkKey, planDeepLinkKey])
 
   const clearChatState = useCallback(({ restoreFocus = false } = {}) => {
+    stopLocalTyping()
+    clearRemoteTyping()
     activeChatIdRef.current = null
     shouldFocusChatRef.current = false
     chatFocusGenerationRef.current = null
@@ -378,7 +433,7 @@ export default function Matches() {
     if (restoreFocus) {
       lastChatTriggerRef.current?.focus({ preventScroll: true })
     }
-  }, [])
+  }, [clearRemoteTyping, stopLocalTyping])
 
   useEffect(() => {
     if (!matchesOverviewTab) return
@@ -583,6 +638,14 @@ export default function Matches() {
 
               if (payload.eventType === 'INSERT') {
                 const message = mapMessage(payload.new, messageUserIdRef.current)
+
+                if (
+                  message.sender === 'other'
+                  && activeChatIdRef.current === payload.new.connection_request_id
+                ) {
+                  clearRemoteTyping()
+                }
+
                 setConnections((current) => current.map((item) => {
                   if (item.id !== payload.new.connection_request_id) return item
                   if (item.messages.some((currentMessage) => currentMessage.id === message.id)) {
@@ -703,7 +766,94 @@ export default function Matches() {
     return () => {
       if (matchesChannel) void supabase.removeChannel(matchesChannel)
     }
-  }, [refreshConnections])
+  }, [clearRemoteTyping, refreshConnections])
+
+  useEffect(() => {
+    clearRemoteTyping()
+    stopLocalTyping()
+
+    if (!chatId) return undefined
+
+    const connectionRequestId = chatId
+    const typingChannel = supabase
+      .channel(`conversation-typing:${connectionRequestId}`, {
+        config: { broadcast: { self: false, ack: false } },
+      })
+      .on('broadcast', { event: 'typing' }, ({ payload }) => {
+        if (
+          !matchesMountedRef.current
+          || activeChatIdRef.current !== connectionRequestId
+          || !isTypingEventForConversation(payload, {
+            connectionRequestId,
+            currentUserId: messageUserIdRef.current,
+          })
+        ) return
+
+        clearRemoteTyping()
+
+        if (!payload.isTyping) {
+          return
+        }
+
+        setTypingConnectionId(connectionRequestId)
+        remoteTypingTimerRef.current = window.setTimeout(() => {
+          if (matchesMountedRef.current) setTypingConnectionId(null)
+          remoteTypingTimerRef.current = null
+        }, TYPING_IDLE_MS + 1200)
+      })
+      .subscribe((status) => {
+        if (typingChannelRef.current === typingChannel) {
+          typingSubscribedRef.current = status === 'SUBSCRIBED'
+        }
+      })
+
+    typingChannelRef.current = typingChannel
+    typingChannelConnectionIdRef.current = connectionRequestId
+    typingSubscribedRef.current = false
+    localTypingActiveRef.current = false
+    lastTypingBroadcastAtRef.current = 0
+
+    return () => {
+      if (typingChannelRef.current === typingChannel) {
+        if (localTypingActiveRef.current && messageUserIdRef.current) {
+          void typingChannel.send({
+            type: 'broadcast',
+            event: 'typing',
+            payload: createTypingPayload({
+              connectionRequestId,
+              senderId: messageUserIdRef.current,
+              isTyping: false,
+            }),
+          })
+        }
+
+        typingChannelRef.current = null
+        typingChannelConnectionIdRef.current = null
+        typingSubscribedRef.current = false
+        localTypingActiveRef.current = false
+      }
+
+      if (typingIdleTimerRef.current) {
+        window.clearTimeout(typingIdleTimerRef.current)
+        typingIdleTimerRef.current = null
+      }
+      if (remoteTypingTimerRef.current) {
+        window.clearTimeout(remoteTypingTimerRef.current)
+        remoteTypingTimerRef.current = null
+      }
+
+      void supabase.removeChannel(typingChannel)
+    }
+  }, [chatId, clearRemoteTyping, stopLocalTyping])
+
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState !== 'visible') stopLocalTyping()
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [stopLocalTyping])
 
   const pendingCount = connections.filter(
     (item) => item.status === 'pending'
@@ -1443,6 +1593,7 @@ export default function Matches() {
 
   function openChat(id) {
     invalidateDeepLinkNavigation()
+    stopLocalTyping()
     lastChatTriggerRef.current = document.activeElement
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur()
@@ -1476,6 +1627,7 @@ export default function Matches() {
     if (!text || !chat || !userId || isSendingMessage) return
 
     invalidateDeepLinkNavigation()
+    stopLocalTyping()
     const connectionRequestId = chat.id
     setIsSendingMessage(true)
     setError('')
@@ -1521,6 +1673,8 @@ export default function Matches() {
 
     setConnections((current) => current.filter((item) => item.profileId !== profileId))
     if (chatId && blockedConnectionIds.includes(chatId)) {
+      stopLocalTyping()
+      clearRemoteTyping()
       activeChatIdRef.current = null
       setChatId(null)
       setDraft('')
@@ -1867,6 +2021,15 @@ export default function Matches() {
                   })}
                 </div>
 
+                <div className="chat-typing-region" aria-live="polite" aria-atomic="true">
+                  {typingConnectionId === chat.id && (
+                    <span className="chat-typing-status">
+                      <span className="chat-typing-dots" aria-hidden="true"><i /><i /><i /></span>
+                      {chat.name} đang nhập…
+                    </span>
+                  )}
+                </div>
+
                 <form className="chat-composer" onSubmit={sendMessage}>
                   <label className="profile-field">
                     <span>Tin nhắn</span>
@@ -1874,7 +2037,22 @@ export default function Matches() {
                       value={draft}
                       onChange={(event) => {
                         invalidateDeepLinkNavigation()
-                        setDraft(event.target.value)
+                        const nextDraft = event.target.value
+                        setDraft(nextDraft)
+
+                        if (!nextDraft.trim()) {
+                          stopLocalTyping()
+                          return
+                        }
+
+                        sendTypingState(true)
+                        if (typingIdleTimerRef.current) {
+                          window.clearTimeout(typingIdleTimerRef.current)
+                        }
+                        typingIdleTimerRef.current = window.setTimeout(
+                          stopLocalTyping,
+                          TYPING_IDLE_MS
+                        )
                       }}
                       placeholder="Nhập lời chào..."
                       maxLength={1000}
