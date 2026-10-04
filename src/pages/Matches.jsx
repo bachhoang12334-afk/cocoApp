@@ -47,6 +47,12 @@ import {
   getConversationActivityDate,
   sortConversationsByActivity,
 } from '../lib/conversationFilters'
+import {
+  clearConversationDraft,
+  CONVERSATION_DRAFT_MAX_LENGTH,
+  readConversationDraft,
+  saveConversationDraft,
+} from '../lib/conversationDrafts'
 
 const purposeLabels = {
   study_group: 'Học nhóm',
@@ -58,6 +64,16 @@ const terminalConnectionNotificationMessages = {
   request_declined: 'Lời mời kết nối đã bị từ chối và không còn trong danh sách chờ.',
   request_cancelled: 'Lời mời kết nối đã bị hủy và không còn trong danh sách chờ.',
   connection_disconnected: 'Kết nối đã được ngắt và cuộc trò chuyện không còn khả dụng.',
+}
+
+function getConversationDraftStorage() {
+  if (typeof window === 'undefined') return null
+
+  try {
+    return window.sessionStorage
+  } catch {
+    return null
+  }
 }
 
 function mapRequest(request, userId, messagePagesByRequest, plansByRequest) {
@@ -324,6 +340,7 @@ export default function Matches() {
   const [tab, setTab] = useState(matchesOverviewTab || 'pending')
   const [chatId, setChatId] = useState(null)
   const [draft, setDraft] = useState('')
+  const [draftStorageStatus, setDraftStorageStatus] = useState('idle')
   const [conversationQuery, setConversationQuery] = useState('')
   const [showUnreadOnly, setShowUnreadOnly] = useState(false)
   const [typingConnectionId, setTypingConnectionId] = useState(null)
@@ -372,6 +389,34 @@ export default function Matches() {
   const lastTypingBroadcastAtRef = useRef(0)
   const typingIdleTimerRef = useRef(null)
   const remoteTypingTimerRef = useRef(null)
+
+  const restoreConversationDraft = useCallback((connectionRequestId) => {
+    const restoredDraft = readConversationDraft(getConversationDraftStorage(), {
+      userId: messageUserIdRef.current,
+      connectionRequestId,
+    })
+
+    setDraft(restoredDraft)
+    setDraftStorageStatus(restoredDraft ? 'saved' : 'idle')
+  }, [])
+
+  const persistConversationDraft = useCallback((connectionRequestId, nextDraft) => {
+    const saved = saveConversationDraft(getConversationDraftStorage(), {
+      userId: messageUserIdRef.current,
+      connectionRequestId,
+    }, nextDraft)
+
+    setDraftStorageStatus(nextDraft.trim()
+      ? saved ? 'saved' : 'unavailable'
+      : 'idle')
+  }, [])
+
+  const removeConversationDraft = useCallback((connectionRequestId) => {
+    clearConversationDraft(getConversationDraftStorage(), {
+      userId: messageUserIdRef.current,
+      connectionRequestId,
+    })
+  }, [])
 
   const sendTypingState = useCallback((isTyping) => {
     const channel = typingChannelRef.current
@@ -435,6 +480,7 @@ export default function Matches() {
     chatFocusGenerationRef.current = null
     setChatId(null)
     setDraft('')
+    setDraftStorageStatus('idle')
     setLinkedPlan(null)
     setLinkedPlanConnectionId(null)
     planDialogConnectionIdRef.current = null
@@ -975,7 +1021,7 @@ export default function Matches() {
         setTab('accepted')
         activeChatIdRef.current = deepLinkConnectionId
         setChatId(deepLinkConnectionId)
-        setDraft('')
+        restoreConversationDraft(deepLinkConnectionId)
         setLinkedPlan(exactPlan)
         setLinkedPlanConnectionId(deepLinkConnectionId)
         setStatusMessage('Đã mở đúng Coco Plan từ thông báo.')
@@ -1026,6 +1072,7 @@ export default function Matches() {
     isDeepLinkConnectionAccepted,
     markConversationRead,
     planDeepLinkKey,
+    restoreConversationDraft,
   ])
 
   useEffect(() => {
@@ -1123,6 +1170,7 @@ export default function Matches() {
         chatFocusGenerationRef.current = interactionVersion
         activeChatIdRef.current = connectionDeepLinkConnectionId
         setChatId(connectionDeepLinkConnectionId)
+        restoreConversationDraft(connectionDeepLinkConnectionId)
         setStatusMessage('Đã mở đúng cuộc trò chuyện từ thông báo.')
         void markConversationRead(connectionDeepLinkConnectionId)
       } catch {
@@ -1164,6 +1212,7 @@ export default function Matches() {
     connectionNotificationDeepLinkKey,
     isLoading,
     markConversationRead,
+    restoreConversationDraft,
   ])
 
   useEffect(() => {
@@ -1311,6 +1360,7 @@ export default function Matches() {
             ? 'Đã từ chối lời mời kết nối.'
             : 'Đã hủy lời mời kết nối.'
       )
+      if (status === 'cancelled') removeConversationDraft(id)
       if (status === 'cancelled' && chatId === id) closeChat()
       if (status === 'accepted') setTab('accepted')
     } catch (updateError) {
@@ -1616,7 +1666,7 @@ export default function Matches() {
     chatFocusGenerationRef.current = null
     activeChatIdRef.current = id
     setChatId(id)
-    setDraft('')
+    restoreConversationDraft(id)
     setLinkedPlan(null)
     setLinkedPlanConnectionId(null)
     void markConversationRead(id)
@@ -1666,7 +1716,9 @@ export default function Matches() {
           ? { ...item, messages: mergeMessages(item.messages, [message]) }
           : item
       ))
+      removeConversationDraft(connectionRequestId)
       setDraft('')
+      setDraftStorageStatus('idle')
       window.requestAnimationFrame(() => {
         const messageList = messageListRef.current
         if (messageList) messageList.scrollTop = messageList.scrollHeight
@@ -1694,6 +1746,8 @@ export default function Matches() {
       .filter((item) => item.profileId === profileId)
       .map((item) => item.id)
 
+    blockedConnectionIds.forEach(removeConversationDraft)
+
     setConnections((current) => current.filter((item) => item.profileId !== profileId))
     if (chatId && blockedConnectionIds.includes(chatId)) {
       stopLocalTyping()
@@ -1701,6 +1755,7 @@ export default function Matches() {
       activeChatIdRef.current = null
       setChatId(null)
       setDraft('')
+      setDraftStorageStatus('idle')
       planDialogConnectionIdRef.current = null
       setPlanDialogConnectionId(null)
     }
@@ -2119,6 +2174,7 @@ export default function Matches() {
                         invalidateDeepLinkNavigation()
                         const nextDraft = event.target.value
                         setDraft(nextDraft)
+                        persistConversationDraft(chat.id, nextDraft)
 
                         if (!nextDraft.trim()) {
                           stopLocalTyping()
@@ -2135,14 +2191,18 @@ export default function Matches() {
                         )
                       }}
                       placeholder="Nhập lời chào..."
-                      maxLength={1000}
+                      maxLength={CONVERSATION_DRAFT_MAX_LENGTH}
                       aria-describedby="chat-composer-hint chat-composer-count"
                       onKeyDown={handleComposerKeyDown}
                       required
                     />
                     <div className="chat-composer-meta">
-                      <span id="chat-composer-hint">Ctrl/Cmd + Enter để gửi · Enter để xuống dòng</span>
-                      <span id="chat-composer-count">{draft.length}/1000</span>
+                      <span id="chat-composer-hint">
+                        {draftStorageStatus === 'saved' && 'Nháp lưu tạm trong tab này · '}
+                        {draftStorageStatus === 'unavailable' && 'Không lưu được nháp · '}
+                        Ctrl/Cmd + Enter để gửi · Enter để xuống dòng
+                      </span>
+                      <span id="chat-composer-count">{draft.length}/{CONVERSATION_DRAFT_MAX_LENGTH}</span>
                     </div>
                   </label>
 

@@ -3935,6 +3935,10 @@ textarea:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+.chat-composer-meta span:first-child {
+  min-width: 0;
+}
+
 .chat-composer-actions {
   display: flex;
   flex-direction: column;
