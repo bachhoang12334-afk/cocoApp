@@ -36,6 +36,7 @@ import {
   normalizeSavedProfileIds,
   updateSavedProfileIds,
 } from '../lib/savedProfiles'
+import { getConnectionRequestErrorMessage } from '../lib/connectionRequestErrors'
 
 const purposes = ['Tất cả', 'Học nhóm', 'Team Project', 'Ghép trọ']
 const purposeValues = {
@@ -151,36 +152,6 @@ function getDiscoverErrorMessage(error) {
 
 function requestKey(profileId) {
   return profileId
-}
-
-function getRequestErrorMessage(error) {
-  const message = error?.message?.toLowerCase() || ''
-
-  if (message.includes('roommate requests require matching genders')) {
-    return 'Không thể gửi lời mời ghép trọ vì hai hồ sơ chưa cùng giới tính.'
-  }
-
-  if (error?.code === '23505') {
-    return 'Đã có lời mời đang chờ hoặc kết nối giữa hai tài khoản.'
-  }
-
-  if (message.includes('users cannot connect while blocked')) {
-    return 'Không thể kết nối với tài khoản này do cài đặt an toàn.'
-  }
-
-  if (message.includes('connection request intro')) {
-    return 'Lời nhắn cần có từ 8 đến 240 ký tự và không thể để trống.'
-  }
-
-  if (message.includes('connection_profile_not_ready')) {
-    return 'Một trong hai hồ sơ chưa đủ thông tin để kết nối. Hãy làm mới danh sách và thử lại.'
-  }
-
-  if (message.includes('connection_requests_paused')) {
-    return 'Một trong hai tài khoản đang tạm dừng kết nối mới. Hãy làm mới danh sách.'
-  }
-
-  return 'Chưa gửi được lời mời. Hãy thử lại sau.'
 }
 
 export default function Discover({ initialPurpose = 'Tất cả' }) {
@@ -531,7 +502,7 @@ export default function Discover({ initialPurpose = 'Tất cả' }) {
       setRequestNotice(`Đã gửi lời mời có lời nhắn tới ${student.name}.`)
       closeInvite()
     } catch (error) {
-      setInviteError(getRequestErrorMessage(error))
+      setInviteError(getConnectionRequestErrorMessage(error))
     } finally {
       setSendingIds((current) => {
         const next = { ...current }

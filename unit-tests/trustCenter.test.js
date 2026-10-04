@@ -22,6 +22,7 @@ test('registration requires explicit agreement with the usage and community rule
 test('trust copy distinguishes private data, matching signals, and account deletion rights', () => {
   assert.match(trustSource, /Email đăng nhập, số điện thoại, danh sách đã lưu, báo cáo/)
   assert.match(trustSource, /không yêu cầu GPS, số nhà, căn cước/)
+  assert.match(trustSource, /giới hạn tần suất lời mời để giảm spam/)
   assert.match(trustSource, /Xoá vĩnh viễn tài khoản và dữ liệu gắn với tài khoản/)
   assert.match(trustSource, /không bảo đảm danh tính, năng lực, hành vi hay độ an toàn/)
 })

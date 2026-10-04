@@ -52,7 +52,7 @@ const privacyGroups = [
 const communityRules = [
   {
     title: 'Đúng mục đích',
-    text: 'Gửi lời mời có ngữ cảnh học nhóm, làm dự án hoặc ghép trọ. Không spam hay quảng cáo trá hình.',
+    text: 'Gửi lời mời có ngữ cảnh học nhóm, làm dự án hoặc ghép trọ. Coco giới hạn tần suất lời mời để giảm spam và quảng cáo trá hình.',
   },
   {
     title: 'Tôn trọng ranh giới',
@@ -108,7 +108,7 @@ export default function TrustCenter({ account }) {
             <span>BẢN DEMO HỌC PHẦN</span>
             <strong>Minh bạch trước khi đăng ký</strong>
             <dl>
-              <div><dt>Cập nhật</dt><dd>03/10/2026</dd></div>
+              <div><dt>Cập nhật</dt><dd>04/10/2026</dd></div>
               <div><dt>Phạm vi</dt><dd>CocoApp</dd></div>
               <div><dt>Ngôn ngữ</dt><dd>Tiếng Việt</dd></div>
             </dl>

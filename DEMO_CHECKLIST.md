@@ -4,7 +4,7 @@ Checklist này giúp chuẩn bị một buổi demo ngắn, có dữ liệu th�
 
 ## 1. Trước buổi demo
 
-- Chạy đủ migrations từ `20260917000000` đến `20260917000021` trên đúng Supabase project.
+- Chạy đủ migrations từ `20260917000000` đến `20260917000022` trên đúng Supabase project.
 - Xác nhận `.env.local` chỉ có `VITE_SUPABASE_URL` và `VITE_SUPABASE_PUBLISHABLE_KEY`; không dùng service role key.
 - Chuẩn bị ít nhất hai tài khoản đã xác nhận email.
 - Hoàn thiện chín trường bắt buộc ở cả hai hồ sơ: họ tên, trường, ngành, năm học, giới tính, mục tiêu, tỉnh/thành phố, khu vực và phạm vi kết nối.
@@ -43,6 +43,7 @@ Không nhập số điện thoại, địa chỉ chính xác, mật khẩu hoặ
 - Trang trắng do cấu hình: kiểm tra `.env.local`, sau đó khởi động lại Vite.
 - Không thấy hồ sơ khác: hoàn thiện đủ chín trường bắt buộc, bật “Nhận kết nối mới” ở cả hai tài khoản và kiểm tra hai tài khoản không chặn nhau.
 - Không gửi được lời mời: kiểm tra mục tiêu hợp lệ, lời nhắn 8–240 ký tự và không có kết nối đang pending/accepted.
+- Bị giới hạn lời mời: chờ hết cửa sổ 10 phút/24 giờ hoặc 60 phút trước khi gửi lại cùng cặp; không xoá dữ liệu để né giới hạn.
 - Không nhắn được: kết nối phải ở trạng thái `accepted`.
 - Realtime chậm: làm mới trang; dữ liệu đã lưu vẫn được tải lại từ Supabase.
 

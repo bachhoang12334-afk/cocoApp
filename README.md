@@ -14,6 +14,7 @@ CocoApp là nền tảng kết nối sinh viên theo nhu cầu thực tế: họ
 - Tải bản sao JSON của hồ sơ, kết nối, tin nhắn, Coco Plan và thiết lập riêng tư trước khi xoá tài khoản.
 - Sao chép lời mời tham gia CocoApp từ trạng thái Khám phá chưa có người dùng khác.
 - Gửi, chấp nhận, từ chối, hủy và ngắt kết nối.
+- Giới hạn lời mời theo thời gian ngay tại database để giảm spam và gửi lại liên tục.
 - Thông báo Realtime với trạng thái đã đọc.
 - Tin nhắn Realtime, lịch sử, phân trang, số tin chưa đọc và trạng thái đang nhập không lưu nội dung nháp.
 - Coco Plan giúp hai kết nối đề xuất, thống nhất và hoàn thành một bước tiếp theo.
@@ -57,6 +58,7 @@ Chạy migrations theo đúng thứ tự trong `supabase/migrations`:
 20. `20260917000019_create_saved_profiles.sql`
 21. `20260917000020_add_connection_pause.sql`
 22. `20260917000021_add_self_service_account_deletion.sql`
+23. `20260917000022_limit_connection_request_spam.sql`
 
 Không chỉnh sửa migration đã chạy. Mọi thay đổi schema tiếp theo phải nằm trong migration mới.
 
