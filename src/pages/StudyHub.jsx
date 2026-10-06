@@ -13,7 +13,9 @@ const SAMPLE_POSTS = [
     title: 'Tìm bạn học Cấu trúc dữ liệu & Thuật toán + ôn thi cuối kỳ',
     subject: 'Khoa học máy tính',
     description: 'Mình đang ôn cây nhị phân, đồ thị và Dijkstra. Muốn tìm bạn học cùng ở thư viện trường hoặc quán cafe gần Z115.',
+    membersCurrent: 1,
     membersNeeded: 3,
+    tags: ['C++', 'Graph', 'Dijkstra', 'Ôn thi'],
     status: 'open',
     createdAt: '2026-10-05T13:00:00.000Z',
   },
@@ -24,7 +26,9 @@ const SAMPLE_POSTS = [
     title: 'Lập nhóm 3–4 bạn luyện TOEIC mục tiêu 650+ chuẩn đầu ra',
     subject: 'Ngoại ngữ & TOEIC',
     description: 'Học online 20h–22h các tối thứ 3, 5, 7. Mỗi buổi cùng giải đề ETS, chữa từ vựng và luyện đọc.',
+    membersCurrent: 2,
     membersNeeded: 4,
+    tags: ['TOEIC', 'ETS', 'Luyện đề', '650+'],
     status: 'open',
     createdAt: '2026-10-04T10:30:00.000Z',
   },
@@ -35,7 +39,9 @@ const SAMPLE_POSTS = [
     title: 'Tìm thêm 1 bạn làm đồ án ứng dụng di động / web campus',
     subject: 'Đồ án CNTT',
     description: 'Nhóm đã có ý tưởng sản phẩm, cần thêm bạn thích UI/UX, frontend và Git để cùng hoàn thiện demo.',
-    membersNeeded: 2,
+    membersCurrent: 2,
+    membersNeeded: 3,
+    tags: ['React', 'UI/UX', 'Git', 'Campus App'],
     status: 'open',
     createdAt: '2026-10-03T08:00:00.000Z',
   },
@@ -105,7 +111,9 @@ export default function StudyHub() {
             title: row.title,
             subject: row.subject,
             description: row.description,
+            membersCurrent: 1,
             membersNeeded: row.members_needed,
+            tags: [row.subject],
             status: row.status,
             createdAt: row.created_at,
           }))
@@ -176,7 +184,9 @@ export default function StudyHub() {
       title: postForm.title.trim(),
       subject: postForm.subject.trim(),
       description: postForm.description.trim() || 'Muốn tìm bạn cùng học và trao đổi kiến thức.',
+      membersCurrent: 1,
       membersNeeded: Number(postForm.membersNeeded) || 1,
+      tags: [postForm.subject.trim()],
       status: 'open',
       createdAt: new Date().toISOString(),
     }
@@ -331,6 +341,9 @@ export default function StudyHub() {
                 </div>
                 <h2>{post.title}</h2>
                 <p>{post.description}</p>
+                <div className="studyhub-tags" aria-label="Chủ đề liên quan">
+                  {(post.tags || [post.subject]).map((tag) => <span key={tag}>#{tag}</span>)}
+                </div>
                 <div className="studyhub-author">
                   <span>{post.authorName?.trim()?.[0]?.toUpperCase() || 'C'}</span>
                   <div>
@@ -338,8 +351,19 @@ export default function StudyHub() {
                     <small>{post.university}</small>
                   </div>
                 </div>
+                <div className="studyhub-member-progress">
+                  <div>
+                    <span>Thành viên</span>
+                    <strong>{post.membersCurrent || 1}/{post.membersNeeded}</strong>
+                  </div>
+                  <progress
+                    max={Math.max(post.membersNeeded, 1)}
+                    value={Math.min(post.membersCurrent || 1, post.membersNeeded)}
+                    aria-label={`Tiến độ nhóm ${post.membersCurrent || 1} trên ${post.membersNeeded} thành viên`}
+                  />
+                </div>
                 <footer>
-                  <span>Cần thêm <strong>{post.membersNeeded}</strong> người</span>
+                  <span>Còn <strong>{Math.max(post.membersNeeded - (post.membersCurrent || 1), 0)}</strong> chỗ</span>
                   <Link to="/discover">Tìm thành viên →</Link>
                 </footer>
               </article>
