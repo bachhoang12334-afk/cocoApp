@@ -165,7 +165,11 @@ export default function Rooms() {
   }, [])
 
   useEffect(() => {
-    void loadRooms()
+    const timer = window.setTimeout(() => {
+      void loadRooms()
+    }, 0)
+
+    return () => window.clearTimeout(timer)
   }, [loadRooms])
 
   const filtered = useMemo(() => {
