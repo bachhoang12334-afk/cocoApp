@@ -9590,6 +9590,36 @@ textarea:focus-visible {
   transform: translateY(-2px);
 }
 
+.rail-logout {
+  display: none;
+  width: 42px;
+  height: 42px;
+  margin-top: 9px;
+  place-items: center;
+  color: #aebbd0;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .04);
+  text-decoration: none;
+  transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease;
+}
+
+.rail-logout svg {
+  width: 20px;
+  height: 20px;
+}
+
+.rail-logout:hover,
+.rail-logout:focus-visible {
+  color: #ffb7af;
+  border-color: rgba(255, 183, 175, .45);
+  background: rgba(255, 111, 97, .12);
+}
+
+.app-shell.sidebar-is-collapsed .rail-logout {
+  display: grid;
+}
+
 .product-sidebar-panel {
   display: flex;
   width: 248px;
