@@ -899,6 +899,19 @@ export default function AppLayout({ children, beforeLogout, onLogoutFailure }) {
             <span className="app-brand-icon">C</span>
           </Link>
 
+          <button
+            type="button"
+            className="rail-sidebar-toggle"
+            aria-label={sidebarCollapsed ? 'Mở thanh điều hướng' : 'Thu gọn thanh điều hướng'}
+            aria-controls="workspace-panel"
+            aria-expanded={!sidebarCollapsed}
+            title={sidebarCollapsed ? 'Mở menu' : 'Thu gọn'}
+            onClick={() => setSidebarCollapsed((current) => !current)}
+          >
+            <Icon name="menu" />
+            <span>{sidebarCollapsed ? 'Mở menu' : 'Thu gọn'}</span>
+          </button>
+
           <nav className="rail-nav" aria-label="Điều hướng nhanh">
             {railMenuItems.map((item) => (
               <NavLink
@@ -930,6 +943,7 @@ export default function AppLayout({ children, beforeLogout, onLogoutFailure }) {
               title="Đăng xuất"
             >
               <Icon name="logout" />
+              <span>Đăng xuất</span>
             </a>
           </div>
         </div>
