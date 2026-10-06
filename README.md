@@ -25,6 +25,8 @@ CocoApp là nền tảng kết nối sinh viên theo nhu cầu thực tế: họ
 - Giao diện responsive và hỗ trợ thao tác bàn phím.
 - Phòng trọ sinh viên: tìm kiếm, lọc giá/tiện ích, hiển thị khu vực gần đúng và đặt lịch xem mà không công khai số điện thoại trong danh sách.
 - Study Hub: đăng nhu cầu tìm nhóm học, tìm thành viên qua luồng Discover và chia sẻ tài liệu/liên kết theo môn học.
+- Quick chat prompts: gợi ý mở đầu theo Học nhóm / Team Project / Ghép trọ, lấy ý tưởng từ prototype Flutter nhưng vẫn gửi tin nhắn bằng Supabase Realtime.
+- Room detail cards: bổ sung đặt cọc, tầng, ngày vào ở, giá điện/nước từ concept Flutter; vẫn không đưa số điện thoại chủ trọ hoặc địa chỉ chính xác vào danh sách công khai.
 
 ## Chạy local
 
