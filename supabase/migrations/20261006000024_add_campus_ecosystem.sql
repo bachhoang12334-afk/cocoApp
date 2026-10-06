@@ -10,7 +10,13 @@ create table if not exists public.room_listings (
   university_near text not null default '',
   distance_label text not null default '',
   price_per_month integer not null check (price_per_month > 0),
+  deposit_amount integer not null default 0 check (deposit_amount >= 0),
   area_m2 numeric(6,1) not null default 20 check (area_m2 > 0),
+  total_rooms integer not null default 1 check (total_rooms >= 0),
+  floor_label text not null default '',
+  move_in_label text not null default '',
+  electricity_rate integer not null default 0 check (electricity_rate >= 0),
+  water_rate integer not null default 0 check (water_rate >= 0),
   room_type text not null default 'Phòng khép kín',
   vacant_rooms integer not null default 1 check (vacant_rooms >= 0),
   gender_preference text not null default 'Tất cả',
@@ -22,6 +28,14 @@ create table if not exists public.room_listings (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.room_listings
+  add column if not exists deposit_amount integer not null default 0 check (deposit_amount >= 0),
+  add column if not exists total_rooms integer not null default 1 check (total_rooms >= 0),
+  add column if not exists floor_label text not null default '',
+  add column if not exists move_in_label text not null default '',
+  add column if not exists electricity_rate integer not null default 0 check (electricity_rate >= 0),
+  add column if not exists water_rate integer not null default 0 check (water_rate >= 0);
 
 create table if not exists public.room_bookings (
   id uuid primary key default gen_random_uuid(),
@@ -140,14 +154,16 @@ with check (owner_id = (select auth.uid()));
 
 insert into public.room_listings (
   slug, owner_id, title, area_label, university_near, distance_label,
-  price_per_month, area_m2, room_type, vacant_rooms, gender_preference,
+  price_per_month, deposit_amount, area_m2, total_rooms, floor_label, move_in_label,
+  electricity_rate, water_rate, room_type, vacant_rooms, gender_preference,
   amenities, rating, reviews_count, description
 )
 values
   (
     'z115-studio', null, 'Studio ban công gần ICTU',
     'Ngõ 18 đường Z115 · Quyết Thắng · Thái Nguyên', 'ICTU',
-    'Khoảng 250 m tới cổng trường', 2200000, 26, 'Studio', 2, 'Tất cả',
+    'Khoảng 250 m tới cổng trường', 2200000, 2000000, 26, 8, 'Tầng 3', 'Vào ở ngay',
+    3500, 25000, 'Studio', 2, 'Tất cả',
     array['Điều hòa','Nóng lạnh','Ban công','Khóa vân tay','Wi‑Fi'],
     4.9, 18,
     'Phòng khép kín, có bàn học và ban công. Coco chỉ công khai khu vực gần đúng.'
@@ -155,7 +171,8 @@ values
   (
     'tan-thinh-mini', null, 'Căn hộ mini full đồ gần KTX',
     'Tân Thịnh · Thái Nguyên', 'ICTU',
-    'Khoảng 400 m tới khu KTX', 2800000, 32, 'Căn hộ mini', 1, 'Tất cả',
+    'Khoảng 400 m tới khu KTX', 2800000, 2500000, 32, 12, 'Tầng 2 · Có thang máy', 'Còn 1 phòng duy nhất',
+    3800, 28000, 'Căn hộ mini', 1, 'Tất cả',
     array['Bếp riêng','Tủ lạnh','Điều hòa','Thang máy','Camera 24/7'],
     5.0, 24,
     'Không gian tách bếp, phù hợp sinh viên muốn ở lâu dài.'
@@ -163,7 +180,8 @@ values
   (
     'quang-trung-room', null, 'Phòng khép kín giá sinh viên',
     'Quang Trung · Thái Nguyên', 'ICTU',
-    'Khoảng 1.2 km tới trường', 1500000, 20, 'Khép kín', 3, 'Nữ',
+    'Khoảng 1.2 km tới trường', 1500000, 1500000, 20, 10, 'Tầng 1', 'Có thể vào ở ngay',
+    3500, 25000, 'Khép kín', 3, 'Nữ',
     array['Nóng lạnh','Wi‑Fi','Chỗ để xe','Giờ giấc tự do'],
     4.7, 11,
     'Phòng gọn, đủ nhu cầu cơ bản; ưu tiên sinh viên nữ.'
