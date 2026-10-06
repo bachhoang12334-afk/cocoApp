@@ -78,6 +78,31 @@ const purposeLabels = {
   roommates: 'Ghép trọ',
 }
 
+const quickChatPrompts = {
+  'Ghép trọ': [
+    'Bạn đang tìm phòng khu vực nào gần trường?',
+    'Ngân sách thuê phòng dự kiến của bạn khoảng bao nhiêu?',
+    'Bạn ưu tiên thói quen sinh hoạt nào khi ở ghép?',
+  ],
+  'Học nhóm': [
+    'Mình bắt đầu ôn phần nào trước nhỉ?',
+    'Bạn thường rảnh khung giờ nào trong tuần?',
+    'Mình có thể cùng làm một bài mẫu rồi chữa cho nhau.',
+  ],
+  'Team Project': [
+    'Nhóm mình đang thiếu vai trò nào nhất?',
+    'Deadline gần nhất của project là khi nào?',
+    'Mình có thể phụ trách frontend/UI hoặc phần Git workflow.',
+  ],
+}
+
+function getQuickChatPrompts(purpose) {
+  return quickChatPrompts[purpose] || [
+    'Chào bạn, mình thấy hồ sơ của bạn khá phù hợp.',
+    'Bạn muốn bắt đầu trao đổi từ mục tiêu nào trước?',
+  ]
+}
+
 const terminalConnectionNotificationMessages = {
   request_declined: 'Lời mời kết nối đã bị từ chối và không còn trong danh sách chờ.',
   request_cancelled: 'Lời mời kết nối đã bị hủy và không còn trong danh sách chờ.',
@@ -1892,6 +1917,13 @@ export default function Matches() {
     }
   }
 
+  function selectQuickPrompt(prompt) {
+    if (!chat) return
+    invalidateDeepLinkNavigation()
+    setDraft(prompt)
+    persistConversationDraft(chat.id, prompt)
+  }
+
   function handleComposerKeyDown(event) {
     const submitShortcut = (event.ctrlKey || event.metaKey) && event.key === 'Enter'
     if (!submitShortcut || event.altKey || event.shiftKey || event.nativeEvent.isComposing) return
@@ -2393,6 +2425,22 @@ export default function Matches() {
                       )}
                     </div>
                   )}
+
+                  <div className="chat-quick-prompts" aria-label="Gợi ý mở đầu cuộc trò chuyện">
+                    <span>Gợi ý mở đầu</span>
+                    <div>
+                      {getQuickChatPrompts(chat.purpose).map((prompt) => (
+                        <button
+                          key={prompt}
+                          type="button"
+                          onClick={() => selectQuickPrompt(prompt)}
+                          disabled={isSendingMessage || isPreparingImage}
+                        >
+                          {prompt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
                   <label className="profile-field">
                     <span>Tin nhắn</span>
