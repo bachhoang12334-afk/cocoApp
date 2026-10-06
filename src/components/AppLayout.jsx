@@ -922,6 +922,15 @@ export default function AppLayout({ children, beforeLogout, onLogoutFailure }) {
             <NavLink to="/profile" className="rail-profile" aria-label={`Hồ sơ của ${fullName}`} title="Hồ sơ">
               {avatarLetter}
             </NavLink>
+            <a
+              href="/login"
+              className="rail-logout"
+              onClick={handleLogout}
+              aria-label="Đăng xuất"
+              title="Đăng xuất"
+            >
+              <Icon name="logout" />
+            </a>
           </div>
         </div>
 
