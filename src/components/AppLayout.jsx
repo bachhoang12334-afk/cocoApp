@@ -1003,17 +1003,6 @@ export default function AppLayout({ children, beforeLogout, onLogoutFailure }) {
       <div className="product-main">
         <header className="product-topbar">
           <div className="topbar-leading">
-            <button
-              type="button"
-              className="sidebar-toggle"
-              aria-label={sidebarCollapsed ? 'Mở bảng mục tiêu kết nối' : 'Thu gọn bảng mục tiêu kết nối'}
-              aria-controls="workspace-panel"
-              aria-expanded={!sidebarCollapsed}
-              onClick={() => setSidebarCollapsed((current) => !current)}
-            >
-              <Icon name="menu" />
-            </button>
-
             <div className="topbar-title">
               <span>COCO COMMUNITY</span>
               <strong>{pageTitle}</strong>
