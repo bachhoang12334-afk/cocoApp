@@ -43,5 +43,12 @@ test('workspace adapts from five-region desktop to focused mobile navigation', (
 test('collapsed workspace keeps logout accessible from the navigation rail', () => {
   assert.match(layoutSource, /className="rail-logout"/)
   assert.match(layoutSource, /aria-label="Đăng xuất"/)
-  assert.match(styleSource, /sidebar-is-collapsed \.rail-logout/)
+  assert.match(productStyles, /sidebar-is-collapsed \.rail-logout/)
+})
+
+
+test('collapsed workspace keeps the menu toggle visible in the rail', () => {
+  assert.match(layoutSource, /className="rail-sidebar-toggle"/)
+  assert.match(layoutSource, /Mở menu/)
+  assert.match(productStyles, /Final navigation visibility guard/)
 })
