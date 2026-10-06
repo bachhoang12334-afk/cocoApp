@@ -96,7 +96,7 @@ Mỗi lần push hoặc mở pull request, GitHub Actions tự chạy `npm ci` v
 
 Playwright là bộ kiểm thử riêng và không nằm trong checkpoint mặc định.
 
-Khi chuẩn bị thuyết trình, dùng [DEMO_CHECKLIST.md](./DEMO_CHECKLIST.md) để kiểm tra dữ liệu và đi theo kịch bản demo 5–7 phút.
+Khi chuẩn bị thuyết trình, dùng [DEMO_CHECKLIST.md](./DEMO_CHECKLIST.md) để kiểm tra dữ liệu và đi theo kịch bản demo 5–7 phút. Bản hợp nhất nhóm được tóm tắt trong [TEAM_FINAL_DEMO.md](./TEAM_FINAL_DEMO.md).
 
 ## Checklist khôi phục tài khoản
 
