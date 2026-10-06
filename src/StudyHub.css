@@ -462,3 +462,41 @@
     grid-column: 1 / -1;
   }
 }
+
+
+.studyhub-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.studyhub-tags span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #f6f5fb;
+  color: #696481;
+  font-size: .75rem;
+}
+
+.studyhub-member-progress {
+  display: grid;
+  gap: 7px;
+}
+
+.studyhub-member-progress > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #716d80;
+  font-size: .8rem;
+}
+
+.studyhub-member-progress strong {
+  color: #4e4a67;
+}
+
+.studyhub-member-progress progress {
+  width: 100%;
+  height: 7px;
+  accent-color: #5f62c9;
+}
