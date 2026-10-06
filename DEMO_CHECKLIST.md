@@ -4,7 +4,7 @@ Checklist này giúp chuẩn bị một buổi demo ngắn, có dữ liệu th�
 
 ## 1. Trước buổi demo
 
-- Chạy đủ migrations từ `20260917000000` đến `20260917000023` trên đúng Supabase project.
+- Chạy đủ migrations từ `20260917000000` đến `20261006000024` trên đúng Supabase project. Nếu migration Campus chưa kịp chạy, Rooms và Study Hub vẫn tự chuyển sang dữ liệu dự phòng để không làm gián đoạn buổi demo.
 - Xác nhận `.env.local` chỉ có `VITE_SUPABASE_URL` và `VITE_SUPABASE_PUBLISHABLE_KEY`; không dùng service role key.
 - Chuẩn bị ít nhất hai tài khoản đã xác nhận email.
 - Hoàn thiện chín trường bắt buộc ở cả hai hồ sơ: họ tên, trường, ngành, năm học, giới tính, mục tiêu, tỉnh/thành phố, khu vực và phạm vi kết nối.
@@ -27,7 +27,9 @@ npm.cmd run check
 8. **Chống mất dữ liệu:** sửa thử một trường ở Hồ sơ rồi mở mục khác; chọn “Ở lại chỉnh sửa” trong cảnh báo thay đổi chưa lưu và lưu hồ sơ trước khi tiếp tục.
 9. **Mất mạng an toàn:** tắt mạng tạm thời, chỉ ra banner ngoại tuyến không che nội dung và trang Kết nối vẫn giữ dữ liệu gần nhất; bật mạng để thấy xác nhận kết nối lại và dữ liệu tự đồng bộ.
 10. **An toàn:** mở menu chặn/báo cáo, giải thích dữ liệu báo cáo riêng tư; không cần tạo báo cáo giả nếu dữ liệu demo cần giữ sạch.
-11. **Quyền dữ liệu:** chỉ ra nút tải bản sao JSON; mở hộp thoại xoá tài khoản để trình bày câu xác nhận và hậu quả, sau đó đóng bằng “Giữ tài khoản”, không xoá tài khoản demo.
+11. **Phòng trọ:** mở `Phòng trọ`, thử tìm theo khu vực/tiện ích, đổi mức giá rồi mở `Đặt lịch xem`. Nhấn mạnh rằng danh sách chỉ hiển thị khu vực gần đúng và số điện thoại người đặt không nằm trong dữ liệu phòng công khai.
+12. **Study Hub:** mở `Study Hub`, chuyển giữa `Nhóm học` và `Tài liệu`, thử tạo một bài tìm nhóm hoặc tài liệu. Nếu backend Campus chưa được migrate, banner sẽ nói rõ đang dùng dữ liệu dự phòng trên thiết bị thay vì làm app lỗi.
+13. **Quyền dữ liệu:** chỉ ra nút tải bản sao JSON; mở hộp thoại xoá tài khoản để trình bày câu xác nhận và hậu quả, sau đó đóng bằng “Giữ tài khoản”, không xoá tài khoản demo.
 
 ## 3. Dữ liệu demo tối thiểu
 
@@ -48,9 +50,25 @@ Không nhập số điện thoại, địa chỉ chính xác, mật khẩu hoặ
 - Bị giới hạn lời mời: chờ hết cửa sổ 10 phút/24 giờ hoặc 60 phút trước khi gửi lại cùng cặp; không xoá dữ liệu để né giới hạn.
 - Không nhắn được: kết nối phải ở trạng thái `accepted`.
 - Không gửi được ảnh: kiểm tra migration `20260917000023`, bucket `message-images` đang private, ảnh nguồn là JPG/PNG/WebP nhỏ hơn 12 MB và kết nối vẫn `accepted`.
+- Rooms hoặc Study Hub báo đang dùng dữ liệu dự phòng: migration `20261006000024_add_campus_ecosystem.sql` chưa có trên Supabase hoặc request bị lỗi. Với buổi thi, vẫn có thể demo đầy đủ UI/interaction; sau buổi thi hãy chạy migration để dữ liệu mới được lưu thật vào Supabase.
 - Banner ngoại tuyến không biến mất: kiểm tra lại kết nối của thiết bị; banner chỉ phản ánh tín hiệu `navigator.onLine`, không khẳng định Supabase đang hoạt động.
 - Realtime chậm: làm mới trang; dữ liệu đã lưu vẫn được tải lại từ Supabase.
 
 ## 5. Thông điệp sản phẩm
 
 > CocoApp giúp sinh viên chuyển từ “đi tìm người trong các nhóm rời rạc” sang một hành trình có mục tiêu: hiểu vì sao phù hợp, kết nối an toàn, trò chuyện và thống nhất bước tiếp theo.
+
+
+## 6. Luồng an toàn nhất cho buổi thi
+
+Nếu thời gian trình bày ngắn hoặc mạng không ổn định, ưu tiên đúng thứ tự này:
+
+1. Login → Dashboard.
+2. Discover → giải thích Coco Fit + privacy.
+3. Ghép trọ → chứng minh rule cùng giới tính.
+4. Kết nối → chat Realtime hoặc mở hội thoại đã chuẩn bị sẵn.
+5. Phòng trọ → lọc + mở form đặt lịch.
+6. Study Hub → chuyển tab + tạo bài mẫu.
+7. Safety / Trust Center → chốt bằng privacy và RLS.
+
+Không cần cố demo reset password, xoá tài khoản hoặc mất mạng nếu giảng viên không hỏi. Các flow đó đã có trong code nhưng dễ tốn thời gian trình bày.
