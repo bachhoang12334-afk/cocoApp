@@ -9508,11 +9508,47 @@ textarea:focus-visible {
   font-weight: 900;
 }
 
+.rail-sidebar-toggle {
+  display: inline-flex;
+  width: 56px;
+  min-height: 48px;
+  margin-top: 16px;
+  padding: 7px 4px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-direction: column;
+  color: #c4cede;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .05);
+  font: inherit;
+  cursor: pointer;
+}
+
+.rail-sidebar-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+.rail-sidebar-toggle span {
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.rail-sidebar-toggle:hover,
+.rail-sidebar-toggle:focus-visible {
+  color: #fff;
+  border-color: rgba(143, 134, 255, .55);
+  background: rgba(117, 108, 255, .16);
+}
+
 .rail-nav {
   display: grid;
   width: 100%;
   gap: 8px;
-  margin-top: 34px;
+  margin-top: 18px;
 }
 
 .rail-link {
@@ -9592,32 +9628,44 @@ textarea:focus-visible {
 
 .rail-logout {
   display: none;
-  width: 42px;
-  height: 42px;
+  width: 58px;
+  min-height: 54px;
   margin-top: 9px;
-  place-items: center;
-  color: #aebbd0;
-  border: 1px solid rgba(255, 255, 255, .12);
+  padding: 6px 3px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-direction: column;
+  color: #ffb7af;
+  border: 1px solid rgba(255, 183, 175, .26);
   border-radius: 14px;
-  background: rgba(255, 255, 255, .04);
+  background: rgba(255, 111, 97, .08);
   text-decoration: none;
   transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease;
 }
 
 .rail-logout svg {
-  width: 20px;
-  height: 20px;
+  width: 19px;
+  height: 19px;
+}
+
+.rail-logout span {
+  display: block;
+  font-size: 8px;
+  font-weight: 850;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .rail-logout:hover,
 .rail-logout:focus-visible {
-  color: #ffb7af;
-  border-color: rgba(255, 183, 175, .45);
-  background: rgba(255, 111, 97, .12);
+  color: #fff;
+  border-color: rgba(255, 183, 175, .58);
+  background: rgba(255, 111, 97, .18);
 }
 
 .app-shell.sidebar-is-collapsed .rail-logout {
-  display: grid;
+  display: flex;
 }
 
 .product-sidebar-panel {
@@ -10287,5 +10335,21 @@ textarea:focus-visible {
   .workspace-tabs a,
   .context-primary-card a {
     transition: none;
+  }
+}
+
+
+/* Final navigation visibility guard */
+@media (min-width: 761px) {
+  .product-rail .rail-sidebar-toggle {
+    display: inline-flex !important;
+  }
+
+  .app-shell.sidebar-is-collapsed .product-rail .rail-logout {
+    display: flex !important;
+  }
+
+  .app-shell.sidebar-is-collapsed .product-rail .rail-logout span {
+    display: block !important;
   }
 }
