@@ -1921,3 +1921,45 @@
     margin-left: 0;
   }
 }
+
+/* Team final demo: contextual chat icebreakers ported from the Flutter concept. */
+.chat-quick-prompts {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.chat-quick-prompts > span {
+  color: #687182;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.chat-quick-prompts > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chat-quick-prompts button {
+  max-width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #dcd6cd;
+  border-radius: 999px;
+  background: #fff;
+  color: #465060;
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.chat-quick-prompts button:hover:not(:disabled) {
+  border-color: #274156;
+  background: #f5f8f7;
+  color: #274156;
+}
+
+.chat-quick-prompts button:disabled {
+  opacity: .55;
+  cursor: default;
+}
