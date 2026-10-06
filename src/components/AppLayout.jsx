@@ -89,6 +89,7 @@ const menuItems = [
   { to: '/roommates', icon: 'room', label: 'Ghép trọ', hint: 'Ở cùng an toàn' },
   { to: '/matches', icon: 'connection', label: 'Kết nối', hint: 'Lời mời & chat' },
   { to: '/safety', icon: 'safety', label: 'An toàn', hint: 'Chặn & báo cáo' },
+  { to: '/rooms', icon: 'room', label: 'Phòng trọ', hint: 'Tìm & đặt lịch xem' },
 ]
 
 const mobileMenuItems = [
@@ -123,6 +124,7 @@ const pageTitles = {
   '/matches': 'Kết nối của bạn',
   '/safety': 'Trung tâm an toàn',
   '/profile': 'Hồ sơ cá nhân',
+  '/rooms': 'Phòng trọ',
 }
 
 const pageContexts = {
@@ -174,6 +176,13 @@ const pageContexts = {
     description: 'Cậu có thể chặn, báo cáo hoặc ngắt kết nối bất cứ lúc nào khi trải nghiệm không còn phù hợp.',
     action: 'Đọc Trust Center',
     to: '/trust',
+  },
+  '/rooms': {
+    eyebrow: 'TÌM TRỌ AN TOÀN',
+    title: 'Xem đủ thông tin trước khi hẹn',
+    description: 'Lọc theo khu vực, ngân sách và tiện ích; địa chỉ chi tiết chỉ nên chia sẻ khi lịch xem đã được xác nhận.',
+    action: 'Tìm bạn ghép trọ',
+    to: '/roommates',
   },
   '/profile': {
     eyebrow: 'HỒ SƠ CỦA CẬU',
