@@ -38,3 +38,10 @@ test('workspace adapts from five-region desktop to focused mobile navigation', (
   assert.match(productStyles, /\.mobile-bottom-nav\s*\{[\s\S]*?z-index: 70;/)
   assert.match(productStyles, /@media \(prefers-reduced-motion: reduce\)/)
 })
+
+
+test('collapsed workspace keeps logout accessible from the navigation rail', () => {
+  assert.match(layoutSource, /className="rail-logout"/)
+  assert.match(layoutSource, /aria-label="Đăng xuất"/)
+  assert.match(styleSource, /sidebar-is-collapsed \.rail-logout/)
+})
