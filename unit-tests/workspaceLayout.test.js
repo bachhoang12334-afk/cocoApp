@@ -47,8 +47,16 @@ test('collapsed workspace keeps logout accessible from the navigation rail', () 
 })
 
 
-test('collapsed workspace keeps the menu toggle visible in the rail', () => {
+test('workspace uses one stable rail toggle and keeps medium desktop expansion available', () => {
   assert.match(layoutSource, /className="rail-sidebar-toggle"/)
   assert.match(layoutSource, /Mở menu/)
-  assert.match(productStyles, /Final navigation visibility guard/)
+  assert.doesNotMatch(layoutSource, /className="sidebar-toggle"/)
+  assert.match(productStyles, /product-shell\.sidebar-is-expanded[\s\S]*?--workspace-navigation-width: 320px/)
+  assert.match(productStyles, /sidebar-is-expanded \.product-sidebar-panel[\s\S]*?display: flex/)
+})
+
+
+test('expanded workspace shows an explicit logout label', () => {
+  assert.match(layoutSource, /className="logout-button"[\s\S]*?<span>Đăng xuất<\/span>/)
+  assert.match(productStyles, /product-sidebar-panel \.logout-button span[\s\S]*?display: inline/)
 })
