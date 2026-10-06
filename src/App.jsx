@@ -27,6 +27,7 @@ const Profile = lazy(() => import('./pages/Profile'))
 const Discover = lazy(() => import('./pages/Discover'))
 const Matches = lazy(() => import('./pages/Matches'))
 const SafetyCenter = lazy(() => import('./pages/SafetyCenter'))
+const Rooms = lazy(() => import('./pages/Rooms'))
 
 function RouteLoadingState() {
   return (
@@ -247,6 +248,11 @@ function AppRoutes() {
         <Route
           path="/roommates"
           element={protectedPage(<Discover key="roommates" initialPurpose="Ghép trọ" />, account, isCheckingSession)}
+        />
+
+        <Route
+          path="/rooms"
+          element={protectedPage(<Rooms />, account, isCheckingSession)}
         />
 
         <Route
