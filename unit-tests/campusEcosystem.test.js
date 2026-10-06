@@ -55,3 +55,16 @@ test('realtime chat includes contextual quick prompts without replacing the Supa
   assert.match(matchesSource, /Gợi ý mở đầu/)
   assert.match(matchesSource, /from\('messages'\)/)
 })
+
+
+test('rooms include a private saved-room bookmark filter from the merged prototype', () => {
+  assert.match(roomsSource, /cocoapp:saved-rooms/)
+  assert.match(roomsSource, /Chỉ phòng đã lưu/)
+  assert.match(roomsSource, /Lưu phòng/)
+})
+
+test('Study Hub shows useful group context from the merged prototype', () => {
+  assert.match(studySource, /studyhub-tags/)
+  assert.match(studySource, /studyhub-member-progress/)
+  assert.match(studySource, /membersCurrent/)
+})
