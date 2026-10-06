@@ -13,7 +13,13 @@ const SAMPLE_ROOMS = [
     university: 'ICTU',
     distance: 'Khoảng 250 m tới cổng trường',
     price: 2200000,
+    deposit: 2000000,
     size: 26,
+    totalRooms: 8,
+    floor: 'Tầng 3',
+    moveIn: 'Vào ở ngay',
+    electricityRate: 3500,
+    waterRate: 25000,
     type: 'Studio',
     vacant: 2,
     gender: 'Tất cả',
@@ -30,7 +36,13 @@ const SAMPLE_ROOMS = [
     university: 'ICTU',
     distance: 'Khoảng 400 m tới khu KTX',
     price: 2800000,
+    deposit: 2500000,
     size: 32,
+    totalRooms: 12,
+    floor: 'Tầng 2 · Có thang máy',
+    moveIn: 'Còn 1 phòng duy nhất',
+    electricityRate: 3800,
+    waterRate: 28000,
     type: 'Căn hộ mini',
     vacant: 1,
     gender: 'Tất cả',
@@ -47,7 +59,13 @@ const SAMPLE_ROOMS = [
     university: 'ICTU',
     distance: 'Khoảng 1.2 km tới trường',
     price: 1500000,
+    deposit: 1500000,
     size: 20,
+    totalRooms: 10,
+    floor: 'Tầng 1',
+    moveIn: 'Có thể vào ở ngay',
+    electricityRate: 3500,
+    waterRate: 25000,
     type: 'Khép kín',
     vacant: 3,
     gender: 'Nữ',
@@ -72,6 +90,10 @@ function money(value) {
   return new Intl.NumberFormat('vi-VN').format(value) + ' đ/tháng'
 }
 
+function moneyAmount(value) {
+  return new Intl.NumberFormat('vi-VN').format(value) + ' đ'
+}
+
 function readLocalBookings() {
   try {
     return JSON.parse(window.localStorage.getItem('cocoapp:room-bookings') || '[]')
@@ -88,7 +110,13 @@ function mapRoom(row) {
     university: row.university_near,
     distance: row.distance_label,
     price: row.price_per_month,
+    deposit: row.deposit_amount || row.price_per_month,
     size: Number(row.area_m2),
+    totalRooms: row.total_rooms || row.vacant_rooms,
+    floor: row.floor_label || 'Chưa cập nhật tầng',
+    moveIn: row.move_in_label || 'Liên hệ để xác nhận',
+    electricityRate: row.electricity_rate || 0,
+    waterRate: row.water_rate || 0,
     type: row.room_type,
     vacant: row.vacant_rooms,
     gender: row.gender_preference,
@@ -127,7 +155,7 @@ export default function Rooms() {
       const [roomResult, bookingResult] = await Promise.all([
         supabase
           .from('room_listings')
-          .select('id, title, area_label, university_near, distance_label, price_per_month, area_m2, room_type, vacant_rooms, gender_preference, amenities, rating, reviews_count, description, is_available')
+          .select('id, title, area_label, university_near, distance_label, price_per_month, deposit_amount, area_m2, total_rooms, floor_label, move_in_label, electricity_rate, water_rate, room_type, vacant_rooms, gender_preference, amenities, rating, reviews_count, description, is_available')
           .eq('is_available', true)
           .order('created_at', { ascending: false }),
         supabase
@@ -356,6 +384,13 @@ export default function Rooms() {
                 <h2>{room.title}</h2>
                 <p className="room-area">{room.area}</p>
                 <p className="room-price">{money(room.price)}</p>
+                <div className="room-detail-grid" aria-label="Chi phí và thông tin phòng">
+                  <span><small>Đặt cọc</small><strong>{moneyAmount(room.deposit)}</strong></span>
+                  <span><small>Tầng</small><strong>{room.floor}</strong></span>
+                  <span><small>Điện</small><strong>{room.electricityRate ? moneyAmount(room.electricityRate) + '/kWh' : 'Hỏi khi xem'}</strong></span>
+                  <span><small>Nước</small><strong>{room.waterRate ? moneyAmount(room.waterRate) + '/tháng' : 'Hỏi khi xem'}</strong></span>
+                </div>
+                <p className="room-move-in">{room.moveIn} · {room.vacant}/{room.totalRooms} phòng đang trống</p>
                 <p className="room-description">{room.description}</p>
 
                 <div className="room-amenities">
