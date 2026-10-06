@@ -132,7 +132,11 @@ export default function StudyHub() {
   }, [])
 
   useEffect(() => {
-    void loadHub()
+    const timer = window.setTimeout(() => {
+      void loadHub()
+    }, 0)
+
+    return () => window.clearTimeout(timer)
   }, [loadHub])
 
   const visiblePosts = useMemo(() => {
