@@ -9808,8 +9808,8 @@ textarea:focus-visible {
 
 .app-shell .product-sidebar-panel .sidebar-bottom {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 42px;
-  gap: 7px;
+  grid-template-columns: 1fr;
+  gap: 9px;
   margin-top: auto;
   padding-top: 17px;
   border-top: 1px solid var(--coco-line);
@@ -9824,20 +9824,30 @@ textarea:focus-visible {
 }
 
 .app-shell .product-sidebar-panel .logout-button {
-  display: grid !important;
-  width: 42px;
-  height: 42px;
-  min-height: 42px;
+  display: flex !important;
+  width: 100%;
+  min-height: 44px;
   margin: 0;
-  padding: 0;
-  place-items: center;
-  color: #8a90a1;
-  border: 1px solid var(--coco-line);
-  background: #fff;
+  padding: 0 12px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: #b9483f;
+  border: 1px solid #ffd0ca;
+  border-radius: 12px;
+  background: #fff5f3;
 }
 
 .app-shell .product-sidebar-panel .logout-button span {
-  display: none;
+  display: inline !important;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.app-shell .product-sidebar-panel .logout-button:hover {
+  color: #fff;
+  border-color: #d6574d;
+  background: #d6574d;
 }
 
 .app-shell.sidebar-is-collapsed .product-sidebar {
@@ -10228,17 +10238,30 @@ textarea:focus-visible {
 }
 
 @media (max-width: 1100px) and (min-width: 761px) {
-  .product-shell {
+  .product-shell.sidebar-is-collapsed {
     --workspace-navigation-width: var(--workspace-rail-width);
   }
 
-  .app-shell .product-sidebar {
-    grid-template-columns: var(--workspace-rail-width);
+  .product-shell.sidebar-is-expanded {
+    --workspace-navigation-width: 320px;
   }
 
-  .product-sidebar-panel,
-  .sidebar-toggle {
+  .app-shell.sidebar-is-collapsed .product-sidebar {
+    grid-template-columns: var(--workspace-rail-width);
+    width: var(--workspace-rail-width);
+  }
+
+  .app-shell.sidebar-is-collapsed .product-sidebar-panel {
     display: none;
+  }
+
+  .app-shell.sidebar-is-expanded .product-sidebar {
+    grid-template-columns: var(--workspace-rail-width) minmax(0, 248px);
+    width: 320px;
+  }
+
+  .app-shell.sidebar-is-expanded .product-sidebar-panel {
+    display: flex;
   }
 
   .product-topbar {
@@ -10351,5 +10374,34 @@ textarea:focus-visible {
 
   .app-shell.sidebar-is-collapsed .product-rail .rail-logout span {
     display: block !important;
+  }
+}
+
+
+/* Stable sidebar controls */
+@media (min-width: 761px) {
+  .product-rail .rail-sidebar-toggle {
+    display: inline-flex !important;
+  }
+
+  .app-shell.sidebar-is-collapsed .product-rail .rail-logout {
+    display: flex !important;
+  }
+
+  .app-shell.sidebar-is-collapsed .product-rail .rail-logout span {
+    display: block !important;
+  }
+
+  .app-shell.sidebar-is-expanded .product-sidebar-panel .sidebar-bottom {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell.sidebar-is-expanded .product-sidebar-panel .logout-button {
+    display: flex !important;
+    width: 100% !important;
+  }
+
+  .app-shell.sidebar-is-expanded .product-sidebar-panel .logout-button span {
+    display: inline !important;
   }
 }
