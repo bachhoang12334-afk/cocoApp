@@ -485,3 +485,40 @@
   font-size: .82rem;
   font-weight: 650;
 }
+
+
+.rooms-filter-toggles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.room-card-rating-save {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.room-save-button {
+  padding: 6px 9px !important;
+  border: 1px solid #d9d5e6 !important;
+  border-radius: 999px !important;
+  background: #fff !important;
+  color: #655f78 !important;
+  font-size: .74rem !important;
+}
+
+.room-save-button.is-saved {
+  border-color: #aca4e5 !important;
+  background: #f0effa !important;
+  color: #564ca9 !important;
+}
+
+@media (max-width: 980px) {
+  .rooms-filter-toggles {
+    grid-column: 1 / -1;
+  }
+}
