@@ -6,6 +6,7 @@ const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'ut
 const layoutSource = await readFile(new URL('../src/components/AppLayout.jsx', import.meta.url), 'utf8')
 const roomsSource = await readFile(new URL('../src/pages/Rooms.jsx', import.meta.url), 'utf8')
 const studySource = await readFile(new URL('../src/pages/StudyHub.jsx', import.meta.url), 'utf8')
+const matchesSource = await readFile(new URL('../src/pages/Matches.jsx', import.meta.url), 'utf8')
 const migrationSource = await readFile(
   new URL('../supabase/migrations/20261006000024_add_campus_ecosystem.sql', import.meta.url),
   'utf8'
@@ -37,4 +38,20 @@ test('campus database tables are protected with row level security', () => {
   assert.match(migrationSource, /alter table public\.study_posts enable row level security/)
   assert.match(migrationSource, /student_id = \(select auth\.uid\(\)\)/)
   assert.match(migrationSource, /author_id = \(select auth\.uid\(\)\)/)
+})
+
+
+test('room cards keep useful cost details without exposing landlord contact data', () => {
+  assert.match(roomsSource, /deposit_amount/)
+  assert.match(roomsSource, /electricity_rate/)
+  assert.match(roomsSource, /water_rate/)
+  assert.match(migrationSource, /deposit_amount integer/)
+  assert.doesNotMatch(migrationSource, /landlord_phone/)
+  assert.doesNotMatch(migrationSource, /exact_address/)
+})
+
+test('realtime chat includes contextual quick prompts without replacing the Supabase message flow', () => {
+  assert.match(matchesSource, /quickChatPrompts/)
+  assert.match(matchesSource, /Gợi ý mở đầu/)
+  assert.match(matchesSource, /from\('messages'\)/)
 })
