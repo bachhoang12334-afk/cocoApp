@@ -452,3 +452,36 @@
 .rooms-sync-note {
   padding-inline: 4px;
 }
+
+
+.room-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.room-detail-grid span {
+  display: grid;
+  gap: 3px;
+  padding: 10px 11px;
+  border-radius: 12px;
+  background: #f8f7fc;
+  border: 1px solid #ece9f4;
+}
+
+.room-detail-grid small {
+  color: #858095;
+  font-size: .72rem;
+}
+
+.room-detail-grid strong {
+  color: #39344f;
+  font-size: .84rem;
+}
+
+.room-move-in {
+  margin: 0;
+  color: #5d5870;
+  font-size: .82rem;
+  font-weight: 650;
+}
