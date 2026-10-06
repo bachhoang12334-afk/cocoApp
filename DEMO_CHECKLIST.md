@@ -72,3 +72,12 @@ Nếu thời gian trình bày ngắn hoặc mạng không ổn định, ưu tiê
 7. Safety / Trust Center → chốt bằng privacy và RLS.
 
 Không cần cố demo reset password, xoá tài khoản hoặc mất mạng nếu giảng viên không hỏi. Các flow đó đã có trong code nhưng dễ tốn thời gian trình bày.
+
+
+## 7. Điểm nên show của bản hợp nhất nhóm
+
+- UI/UX và Login/Register: giữ nguyên bản React/Supabase ổn định.
+- Chat: mở một hội thoại và bấm thử một **Quick prompt**; nội dung chỉ được điền vào ô nhắn, chưa tự gửi.
+- Rooms: chỉ khu vực gần đúng được công khai; show thêm đặt cọc, tầng, ngày vào ở, giá điện/nước.
+- Study Hub: nội dung mẫu bám sát DSA, TOEIC và project sinh viên ICTU.
+- Không dùng các flow Flutter cũ như auth local, polling chat hoặc API mock trong buổi demo.
