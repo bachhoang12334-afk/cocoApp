@@ -102,6 +102,15 @@ function readLocalBookings() {
   }
 }
 
+function readSavedRoomIds() {
+  try {
+    const value = JSON.parse(window.localStorage.getItem('cocoapp:saved-rooms') || '[]')
+    return Array.isArray(value) ? value.map(String) : []
+  } catch {
+    return []
+  }
+}
+
 function mapRoom(row) {
   return {
     id: row.id,
@@ -132,6 +141,8 @@ export default function Rooms() {
   const [query, setQuery] = useState('')
   const [price, setPrice] = useState('all')
   const [onlyVacant, setOnlyVacant] = useState(true)
+  const [savedOnly, setSavedOnly] = useState(false)
+  const [savedRoomIds, setSavedRoomIds] = useState(readSavedRoomIds)
   const [rooms, setRooms] = useState(SAMPLE_ROOMS)
   const [selectedRoom, setSelectedRoom] = useState(null)
   const [bookings, setBookings] = useState(readLocalBookings)
@@ -221,10 +232,26 @@ export default function Rooms() {
       return (
         (!normalizedQuery || haystack.includes(normalizedQuery)) &&
         priceMatches &&
-        (!onlyVacant || room.vacant > 0)
+        (!onlyVacant || room.vacant > 0) &&
+        (!savedOnly || savedRoomIds.includes(String(room.id)))
       )
     })
-  }, [onlyVacant, price, query, rooms])
+  }, [onlyVacant, price, query, rooms, savedOnly, savedRoomIds])
+
+  function toggleSavedRoom(roomId) {
+    const id = String(roomId)
+    const next = savedRoomIds.includes(id)
+      ? savedRoomIds.filter((savedId) => savedId !== id)
+      : [id, ...savedRoomIds]
+
+    setSavedRoomIds(next)
+
+    try {
+      window.localStorage.setItem('cocoapp:saved-rooms', JSON.stringify(next))
+    } catch {
+      // Saved-room state still works for the current session.
+    }
+  }
 
   function openBooking(room) {
     setSelectedRoom(room)
@@ -349,14 +376,24 @@ export default function Rooms() {
             ))}
           </select>
 
-          <label className="rooms-checkbox">
-            <input
-              type="checkbox"
-              checked={onlyVacant}
-              onChange={(event) => setOnlyVacant(event.target.checked)}
-            />
-            Chỉ còn phòng
-          </label>
+          <div className="rooms-filter-toggles">
+            <label className="rooms-checkbox">
+              <input
+                type="checkbox"
+                checked={onlyVacant}
+                onChange={(event) => setOnlyVacant(event.target.checked)}
+              />
+              Chỉ còn phòng
+            </label>
+            <label className="rooms-checkbox">
+              <input
+                type="checkbox"
+                checked={savedOnly}
+                onChange={(event) => setSavedOnly(event.target.checked)}
+              />
+              Chỉ phòng đã lưu ({savedRoomIds.length})
+            </label>
+          </div>
         </section>
 
         <div className="rooms-results-head">
@@ -378,7 +415,17 @@ export default function Rooms() {
               <div className="room-card-body">
                 <div className="room-card-topline">
                   <span>{room.distance}</span>
-                  <span>★ {room.rating} ({room.reviews})</span>
+                  <div className="room-card-rating-save">
+                    <span>★ {room.rating} ({room.reviews})</span>
+                    <button
+                      type="button"
+                      className={savedRoomIds.includes(String(room.id)) ? 'room-save-button is-saved' : 'room-save-button'}
+                      aria-pressed={savedRoomIds.includes(String(room.id))}
+                      onClick={() => toggleSavedRoom(room.id)}
+                    >
+                      {savedRoomIds.includes(String(room.id)) ? 'Đã lưu' : 'Lưu phòng'}
+                    </button>
+                  </div>
                 </div>
 
                 <h2>{room.title}</h2>
