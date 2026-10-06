@@ -68,6 +68,24 @@ const quickActions = [
     text: 'Lọc theo giới tính, thành phố và khu vực.',
     color: 'green',
   },
+  {
+    to: '/rooms',
+    icon: 'room',
+    eyebrow: 'CHỖ Ở PHÙ HỢP',
+    title: 'Tìm phòng trọ',
+    text: 'Lọc phòng, xem khu vực gần đúng và đặt lịch xem.',
+    color: 'green',
+    requiresProfile: false,
+  },
+  {
+    to: '/study-hub',
+    icon: 'study',
+    eyebrow: 'CAMPUS STUDY HUB',
+    title: 'Nhóm học & tài liệu',
+    text: 'Đăng nhu cầu học tập và chia sẻ tài nguyên theo môn.',
+    color: 'blue',
+    requiresProfile: false,
+  },
 ]
 
 function mapDashboardConnection(request, userId) {
@@ -297,13 +315,15 @@ export default function Dashboard() {
           {quickActions.map((action) => (
             <Link
               key={action.to}
-              to={canStartConnections
+              to={action.requiresProfile === false
                 ? action.to
-                : profileReadiness.isReady
-                  ? '/profile#connection-availability'
-                  : '/profile?welcome=1'}
+                : canStartConnections
+                  ? action.to
+                  : profileReadiness.isReady
+                    ? '/profile#connection-availability'
+                    : '/profile?welcome=1'}
               className={`quick-action-card ${action.color}`}
-              aria-label={canStartConnections
+              aria-label={action.requiresProfile === false || canStartConnections
                 ? action.title
                 : profileReadiness.isReady
                   ? `${action.title}: cần bật lại kết nối mới trước`

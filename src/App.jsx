@@ -28,6 +28,7 @@ const Discover = lazy(() => import('./pages/Discover'))
 const Matches = lazy(() => import('./pages/Matches'))
 const SafetyCenter = lazy(() => import('./pages/SafetyCenter'))
 const Rooms = lazy(() => import('./pages/Rooms'))
+const StudyHub = lazy(() => import('./pages/StudyHub'))
 
 function RouteLoadingState() {
   return (
@@ -238,6 +239,11 @@ function AppRoutes() {
         <Route
           path="/study"
           element={protectedPage(<Discover key="study" initialPurpose="Học nhóm" />, account, isCheckingSession)}
+        />
+
+        <Route
+          path="/study-hub"
+          element={protectedPage(<StudyHub />, account, isCheckingSession)}
         />
 
         <Route

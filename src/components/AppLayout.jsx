@@ -90,6 +90,7 @@ const menuItems = [
   { to: '/matches', icon: 'connection', label: 'Kết nối', hint: 'Lời mời & chat' },
   { to: '/safety', icon: 'safety', label: 'An toàn', hint: 'Chặn & báo cáo' },
   { to: '/rooms', icon: 'room', label: 'Phòng trọ', hint: 'Tìm & đặt lịch xem' },
+  { to: '/study-hub', icon: 'study', label: 'Study Hub', hint: 'Nhóm học & tài liệu' },
 ]
 
 const mobileMenuItems = [
@@ -100,7 +101,7 @@ const mobileMenuItems = [
 ]
 
 const railMenuItems = [menuItems[0], menuItems[1], menuItems[5], menuItems[6]]
-const purposeMenuItems = [menuItems[2], menuItems[3], menuItems[4]]
+const purposeMenuItems = [menuItems[2], menuItems[3], menuItems[4], menuItems[8], menuItems[7]]
 
 const workspaceTabs = [
   { to: '/dashboard', label: 'Tổng quan' },
@@ -125,6 +126,7 @@ const pageTitles = {
   '/safety': 'Trung tâm an toàn',
   '/profile': 'Hồ sơ cá nhân',
   '/rooms': 'Phòng trọ',
+  '/study-hub': 'Study Hub',
 }
 
 const pageContexts = {
@@ -176,6 +178,13 @@ const pageContexts = {
     description: 'Cậu có thể chặn, báo cáo hoặc ngắt kết nối bất cứ lúc nào khi trải nghiệm không còn phù hợp.',
     action: 'Đọc Trust Center',
     to: '/trust',
+  },
+  '/study-hub': {
+    eyebrow: 'HỌC CÙNG CỘNG ĐỒNG',
+    title: 'Từ tìm người đến cùng làm việc',
+    description: 'Tạo nhóm học, tìm đồng đội theo môn và chia sẻ tài liệu bằng liên kết rõ nguồn.',
+    action: 'Tìm bạn học phù hợp',
+    to: '/study',
   },
   '/rooms': {
     eyebrow: 'TÌM TRỌ AN TOÀN',

@@ -23,6 +23,8 @@ CocoApp là nền tảng kết nối sinh viên theo nhu cầu thực tế: họ
 - Coco Plan giúp hai kết nối đề xuất, thống nhất và hoàn thành một bước tiếp theo.
 - Khôi phục mật khẩu và gửi lại email xác nhận.
 - Giao diện responsive và hỗ trợ thao tác bàn phím.
+- Phòng trọ sinh viên: tìm kiếm, lọc giá/tiện ích, hiển thị khu vực gần đúng và đặt lịch xem mà không công khai số điện thoại trong danh sách.
+- Study Hub: đăng nhu cầu tìm nhóm học, tìm thành viên qua luồng Discover và chia sẻ tài liệu/liên kết theo môn học.
 
 ## Chạy local
 
@@ -63,6 +65,7 @@ Chạy migrations theo đúng thứ tự trong `supabase/migrations`:
 22. `20260917000021_add_self_service_account_deletion.sql`
 23. `20260917000022_limit_connection_request_spam.sql`
 24. `20260917000023_add_private_message_images.sql`
+25. `20261006000024_add_campus_ecosystem.sql`
 
 Không chỉnh sửa migration đã chạy. Mọi thay đổi schema tiếp theo phải nằm trong migration mới.
 
@@ -110,3 +113,5 @@ Khi chuẩn bị thuyết trình, dùng [DEMO_CHECKLIST.md](./DEMO_CHECKLIST.md)
 - Tin nhắn chỉ hoạt động khi connection đang ở trạng thái `accepted`.
 - Ảnh tin nhắn nằm trong bucket private `message-images`; client chỉ lấy URL ký tạm thời, không tạo URL công khai.
 - Không lưu khóa Supabase hoặc thông tin riêng tư trong repository.
+- `room_bookings` chỉ cho sinh viên tạo booking của chính mình; số điện thoại booking không nằm trong `room_listings` công khai.
+- Study Hub cho phép đọc cộng đồng nhưng chỉ tác giả/chủ sở hữu được quản lý bài đăng hoặc tài liệu của mình.

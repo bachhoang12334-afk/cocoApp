@@ -1,6 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import AppLayout, { Icon } from '../components/AppLayout'
-import './Rooms.css'
+import { getCurrentAccount } from '../auth'
+import { supabase } from '../lib/supabaseClient'
+import '../Rooms.css'
 
 const SAMPLE_ROOMS = [
   {
@@ -18,6 +21,7 @@ const SAMPLE_ROOMS = [
     rating: 4.9,
     reviews: 18,
     description: 'Phòng khép kín, có bàn học và ban công. Coco chỉ hiển thị khu vực gần đúng trước khi lịch xem được xác nhận.',
+    persisted: false,
   },
   {
     id: 'tan-thinh-mini',
@@ -34,6 +38,7 @@ const SAMPLE_ROOMS = [
     rating: 5,
     reviews: 24,
     description: 'Không gian tách bếp, phù hợp sinh viên muốn ở lâu dài. Số nhà và số điện thoại chủ trọ được ẩn ở bước khám phá.',
+    persisted: false,
   },
   {
     id: 'quang-trung-room',
@@ -50,6 +55,7 @@ const SAMPLE_ROOMS = [
     rating: 4.7,
     reviews: 11,
     description: 'Phòng gọn, đủ nhu cầu cơ bản. Chủ trọ ưu tiên sinh viên nữ và cho phép hẹn xem phòng theo khung giờ.',
+    persisted: false,
   },
 ]
 
@@ -66,7 +72,7 @@ function money(value) {
   return new Intl.NumberFormat('vi-VN').format(value) + ' đ/tháng'
 }
 
-function loadBookings() {
+function readLocalBookings() {
   try {
     return JSON.parse(window.localStorage.getItem('cocoapp:room-bookings') || '[]')
   } catch {
@@ -74,12 +80,33 @@ function loadBookings() {
   }
 }
 
+function mapRoom(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    area: row.area_label,
+    university: row.university_near,
+    distance: row.distance_label,
+    price: row.price_per_month,
+    size: Number(row.area_m2),
+    type: row.room_type,
+    vacant: row.vacant_rooms,
+    gender: row.gender_preference,
+    amenities: row.amenities || [],
+    rating: Number(row.rating || 0),
+    reviews: row.reviews_count || 0,
+    description: row.description || '',
+    persisted: true,
+  }
+}
+
 export default function Rooms() {
   const [query, setQuery] = useState('')
   const [price, setPrice] = useState('all')
   const [onlyVacant, setOnlyVacant] = useState(true)
+  const [rooms, setRooms] = useState(SAMPLE_ROOMS)
   const [selectedRoom, setSelectedRoom] = useState(null)
-  const [bookings, setBookings] = useState(loadBookings)
+  const [bookings, setBookings] = useState(readLocalBookings)
   const [bookingForm, setBookingForm] = useState({
     date: '',
     time: timeSlots[0],
@@ -87,11 +114,64 @@ export default function Rooms() {
     note: '',
   })
   const [status, setStatus] = useState('')
+  const [loadNote, setLoadNote] = useState('Đang đồng bộ dữ liệu phòng…')
+  const [userId, setUserId] = useState(null)
+  const [dataMode, setDataMode] = useState('loading')
+
+  const loadRooms = useCallback(async () => {
+    try {
+      const user = await getCurrentAccount()
+      if (!user) throw new Error('missing-session')
+      setUserId(user.id)
+
+      const [roomResult, bookingResult] = await Promise.all([
+        supabase
+          .from('room_listings')
+          .select('id, title, area_label, university_near, distance_label, price_per_month, area_m2, room_type, vacant_rooms, gender_preference, amenities, rating, reviews_count, description, is_available')
+          .eq('is_available', true)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('room_bookings')
+          .select('id, room_id, visit_date, time_slot, note, status, created_at, room:room_listings(title, area_label)')
+          .eq('student_id', user.id)
+          .order('created_at', { ascending: false }),
+      ])
+
+      if (roomResult.error) throw roomResult.error
+      if (bookingResult.error) throw bookingResult.error
+
+      setRooms(roomResult.data?.length ? roomResult.data.map(mapRoom) : SAMPLE_ROOMS)
+      setBookings((bookingResult.data || []).map((row) => ({
+        id: row.id,
+        roomId: row.room_id,
+        roomTitle: row.room?.title || 'Phòng trọ Coco',
+        area: row.room?.area_label || 'Khu vực đã lưu',
+        date: row.visit_date,
+        time: row.time_slot,
+        note: row.note || '',
+        status: row.status,
+        createdAt: row.created_at,
+      })))
+      setDataMode('supabase')
+      setLoadNote(roomResult.data?.length
+        ? 'Dữ liệu phòng được đồng bộ từ Supabase.'
+        : 'Supabase đã sẵn sàng; đang dùng phòng mẫu để buổi demo luôn có dữ liệu.')
+    } catch {
+      setRooms(SAMPLE_ROOMS)
+      setBookings(readLocalBookings())
+      setDataMode('preview')
+      setLoadNote('Đang dùng dữ liệu dự phòng trên thiết bị; luồng demo vẫn hoạt động đầy đủ.')
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadRooms()
+  }, [loadRooms])
 
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase('vi')
 
-    return SAMPLE_ROOMS.filter((room) => {
+    return rooms.filter((room) => {
       const haystack = [
         room.title,
         room.area,
@@ -112,7 +192,7 @@ export default function Rooms() {
         (!onlyVacant || room.vacant > 0)
       )
     })
-  }, [onlyVacant, price, query])
+  }, [onlyVacant, price, query, rooms])
 
   function openBooking(room) {
     setSelectedRoom(room)
@@ -130,7 +210,7 @@ export default function Rooms() {
     setStatus('')
   }
 
-  function submitBooking(event) {
+  async function submitBooking(event) {
     event.preventDefault()
 
     if (!bookingForm.date || bookingForm.phone.trim().length < 8) {
@@ -138,8 +218,41 @@ export default function Rooms() {
       return
     }
 
+    setStatus('Đang lưu lịch xem…')
+
+    if (dataMode === 'supabase' && selectedRoom.persisted && userId) {
+      const { data, error } = await supabase
+        .from('room_bookings')
+        .insert({
+          room_id: selectedRoom.id,
+          student_id: userId,
+          visit_date: bookingForm.date,
+          time_slot: bookingForm.time,
+          student_phone: bookingForm.phone.trim(),
+          note: bookingForm.note.trim(),
+        })
+        .select('id, visit_date, time_slot, note, status, created_at')
+        .single()
+
+      if (!error) {
+        setBookings((current) => [{
+          id: data.id,
+          roomId: selectedRoom.id,
+          roomTitle: selectedRoom.title,
+          area: selectedRoom.area,
+          date: data.visit_date,
+          time: data.time_slot,
+          note: data.note || '',
+          status: data.status,
+          createdAt: data.created_at,
+        }, ...current])
+        setStatus('Đã gửi lịch xem phòng. Thông tin liên hệ của cậu chỉ nằm trong booking riêng tư.')
+        return
+      }
+    }
+
     const booking = {
-      id: crypto.randomUUID?.() || String(Date.now()),
+      id: globalThis.crypto?.randomUUID?.() || String(Date.now()),
       roomId: selectedRoom.id,
       roomTitle: selectedRoom.title,
       area: selectedRoom.area,
@@ -147,6 +260,7 @@ export default function Rooms() {
       time: bookingForm.time,
       phone: bookingForm.phone.trim(),
       note: bookingForm.note.trim(),
+      status: 'pending',
       createdAt: new Date().toISOString(),
     }
 
@@ -156,10 +270,10 @@ export default function Rooms() {
     try {
       window.localStorage.setItem('cocoapp:room-bookings', JSON.stringify(nextBookings))
     } catch {
-      // The confirmation still works even when storage is unavailable.
+      // Keep the current confirmation even when browser storage is unavailable.
     }
 
-    setStatus('Đã lưu lịch xem trên thiết bị này. Bản production sẽ đồng bộ lịch qua Supabase.')
+    setStatus('Đã lưu lịch xem trên thiết bị. Khi migration Campus được áp dụng, Coco sẽ đồng bộ lịch bằng Supabase.')
   }
 
   return (
@@ -167,20 +281,25 @@ export default function Rooms() {
       <main className="rooms-page">
         <section className="rooms-hero">
           <div>
-            <p className="rooms-eyebrow">COCO ROOMS · PREVIEW</p>
+            <p className="rooms-eyebrow">COCO ROOMS</p>
             <h1>Tìm phòng trọ mà không cần công khai quá nhiều</h1>
             <p>
               Lọc theo khu vực, giá và tiện ích. Coco chỉ hiển thị khu vực gần đúng;
-              số nhà và liên hệ chi tiết được giữ lại cho bước xác nhận lịch xem.
+              số nhà và liên hệ chi tiết không nằm trong danh sách khám phá.
             </p>
           </div>
 
           <div className="rooms-hero-stats" aria-label="Tóm tắt phòng trọ">
-            <span><strong>{SAMPLE_ROOMS.length}</strong> phòng mẫu</span>
-            <span><strong>{SAMPLE_ROOMS.reduce((sum, room) => sum + room.vacant, 0)}</strong> chỗ trống</span>
-            <span><strong>{bookings.length}</strong> lịch đã lưu</span>
+            <span><strong>{rooms.length}</strong> phòng đang hiển thị</span>
+            <span><strong>{rooms.reduce((sum, room) => sum + room.vacant, 0)}</strong> chỗ trống</span>
+            <span><strong>{bookings.length}</strong> lịch của cậu</span>
           </div>
         </section>
+
+        <p className="rooms-sync-note" role="status">
+          <span className={dataMode === 'preview' ? 'is-preview' : 'is-online'} />
+          {loadNote}
+        </p>
 
         <section className="rooms-filter-card" aria-label="Bộ lọc phòng trọ">
           <label className="rooms-search">
@@ -211,9 +330,9 @@ export default function Rooms() {
         <div className="rooms-results-head">
           <div>
             <strong>{filtered.length} kết quả</strong>
-            <span>Thông tin demo được chuyển từ concept Flutter sang React/Supabase.</span>
+            <span>Khu vực gần đúng trước, quyết định chia sẻ chi tiết sau.</span>
           </div>
-          <a href="/roommates">Tìm bạn ghép trọ →</a>
+          <Link to="/roommates">Tìm bạn ghép trọ →</Link>
         </div>
 
         <section className="rooms-grid">
@@ -273,6 +392,7 @@ export default function Rooms() {
                   <strong>{booking.roomTitle}</strong>
                   <span>{booking.date} · {booking.time}</span>
                   <small>{booking.area}</small>
+                  <em>{booking.status === 'confirmed' ? 'Đã xác nhận' : 'Đang chờ'}</em>
                 </article>
               ))}
             </div>
@@ -339,7 +459,7 @@ export default function Rooms() {
 
                 <div className="room-privacy-note">
                   <Icon name="safety" />
-                  <span>Địa chỉ chính xác và liên hệ chủ trọ không được công khai ở bước khám phá.</span>
+                  <span>Số điện thoại cậu nhập chỉ phục vụ booking; không được đưa vào danh sách phòng công khai.</span>
                 </div>
 
                 {status && <p className="room-booking-status" role="status">{status}</p>}

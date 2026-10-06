@@ -448,3 +448,7 @@
     grid-column: auto;
   }
 }
+
+.rooms-sync-note {
+  padding-inline: 4px;
+}
